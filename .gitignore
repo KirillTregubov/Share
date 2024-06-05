@@ -1,0 +1,22 @@
+# Local files
+*.local
+.env
+!.env.example
+
+# Node.js
+node_modules
+
+# Distribution
+dist
+dist-ssr
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
