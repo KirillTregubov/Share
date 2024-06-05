@@ -1,16 +1,32 @@
-import { WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 
-const wss = new WebSocketServer({ port: 3000 });
+const port = 3000
 
-console.log('Server started on port 3000');
+const server = new WebSocketServer({ port });
 
-wss.on('connection', function connection(ws) {
-  console.log('connected', ws);
+console.log(`Server started on port ${port}.`);
+
+server.on('connection', function connection(ws) {
+  console.log('Client connected');
+
   ws.on('error', console.error);
 
-  ws.on('message', function message(data) {
-    console.log('received: %s', data);
+  ws.on('message', function message(data, isBinary) {
+    console.log('Received: %s', data);
+
+    // Broadcast to all other clients
+    server.clients.forEach(function each(client) {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(data, { binary: isBinary });
+      }
+    });
   });
 
   ws.send('Greeting from server!');
+  // Broadcast to all other clients
+  server.clients.forEach(function each(client) {
+    if (client !== ws && client.readyState === WebSocket.OPEN) {
+      client.send('New client connected!');
+    }
+  });
 });
