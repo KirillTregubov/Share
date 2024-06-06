@@ -85,3 +85,22 @@ export function useMessages() {
 
   return messages
 }
+
+export function useSocketClose() {
+  useEffect(() => {
+    if (!socket) {
+      throw new Error('Socket is not connected!')
+    }
+
+    const onClose = () => {
+      // TODO: currently this just reloads the page. We should handle this more gracefully, e.g. show a notification and retry
+      router.invalidate()
+    }
+    socket.addEventListener('close', onClose)
+
+    return () => {
+      if (!socket) return
+      socket.removeEventListener('close', onClose)
+    }
+  }, [])
+}

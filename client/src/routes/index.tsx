@@ -5,7 +5,7 @@ import {
   defer
 } from '@tanstack/react-router'
 
-import { connect, useMessages } from '@/lib/data'
+import { connect, useMessages, useSocketClose } from '@/lib/data'
 
 export const Route = createFileRoute('/')({
   loader: () => {
@@ -31,6 +31,17 @@ function SocketMessages() {
   )
 }
 
+function SocketComponent({ socket }: { socket: WebSocket }) {
+  useSocketClose()
+
+  return (
+    <div>
+      <button onClick={() => socket?.send('New message')}>Send message</button>
+      <SocketMessages />
+    </div>
+  )
+}
+
 function Index() {
   const { socket } = Route.useLoaderData()
 
@@ -42,14 +53,7 @@ function Index() {
         {/* Await component: https://tanstack.com/router/latest/docs/framework/react/api/router/awaitComponent */}
         <Await promise={socket} fallback={<div>Connecting...</div>}>
           {/* The promise resolved, so we have a socket */}
-          {(socket) => (
-            <div>
-              <button onClick={() => socket?.send('New message')}>
-                Send message
-              </button>
-              <SocketMessages />
-            </div>
-          )}
+          {(socket) => <SocketComponent socket={socket} />}
         </Await>
       </CatchBoundary>
     </div>
