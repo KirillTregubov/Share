@@ -3,10 +3,13 @@
   "module": "index.ts",
   "type": "module",
   "scripts": {
-    "dev": "bun index.ts"
+    "dev": "bun index.ts",
+    "format": "prettier --write .",
+    "outdated": "npx npm-check-updates"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "prettier": "^3.3.1"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
