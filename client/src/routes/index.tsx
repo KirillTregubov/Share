@@ -4,10 +4,11 @@ import {
   createFileRoute,
   defer
 } from '@tanstack/react-router'
-import { connect, useMessages } from '../lib/data'
+
+import { connect, useMessages } from '@/lib/data'
 
 export const Route = createFileRoute('/')({
-  loader: ({ context: { queryClient } }) => {
+  loader: () => {
     return {
       socket: defer(connect())
     }

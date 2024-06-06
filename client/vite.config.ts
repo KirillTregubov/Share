@@ -10,6 +10,11 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    plugins: [react(), TanStackRouterVite()]
+    plugins: [react(), TanStackRouterVite()],
+    resolve: {
+      alias: {
+        '@': '/src'
+      }
+    }
   }
 })
