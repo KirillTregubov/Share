@@ -1,7 +1,4 @@
-if (!import.meta.env.VITE_WS_URL) {
-  throw new Error('Environment variable VITE_WS_URL is missing')
-}
-const WS_URL = import.meta.env.VITE_WS_URL as string
+const WS_URL = import.meta.env.VITE_WS_URL
 
 let socket = null as WebSocket | null
 
