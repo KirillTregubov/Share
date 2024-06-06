@@ -19,30 +19,30 @@
 
 ### Client
 
-The client is built with [React](https://reactjs.org/) using [Vite](https://vitejs.dev/) as the build tool. It uses [Tailwind CSS](https://tailwindcss.com/) for styling, [Tanstack Router](https://tanstack.com/router/) for routing.
+The client is built with [React](https://reactjs.org/) using [Vite](https://vitejs.dev/) as the build tool. It uses [Bun](https://bun.sh) as a package manager and task runner. It uses [Tailwind CSS](https://tailwindcss.com/) for styling, [Tanstack Router](https://tanstack.com/router/) for routing.
 
 It uses [ESLint](https://eslint.org/) for linting and [Prettier](https://prettier.io/) for formatting.
 
 ### Server
 
-The server is built in [TypeScript](https://www.typescriptlang.org/) using [Node.js](https://nodejs.org/). It uses [ws](https://github.com/websockets/ws) for WebSocket communication.
+The server is built in [TypeScript](https://www.typescriptlang.org/) using [Bun](https://bun.sh).
 
 ## Setup
 
-Ensure both [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/) are installed.
+Ensure [Bun](https://bun.sh) is installed.
 
 ### Client
 
 ```bash
 cd client
-pnpm install
+bun install
 ```
 
 ### Server
 
 ```bash
 cd server
-pnpm install
+bun install
 ```
 
 ## Usage
@@ -52,7 +52,7 @@ pnpm install
 For both client and server, run the following command in their respective directories:
 
 ```bash
-pnpm dev
+bun dev
 ```
 
 ## Authors

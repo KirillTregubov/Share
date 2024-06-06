@@ -1,32 +1,32 @@
-import WebSocket, { WebSocketServer } from 'ws';
-
-const port = 3000
-
-const server = new WebSocketServer({ port });
-
-console.log(`Server started on port ${port}.`);
-
-server.on('connection', function connection(ws) {
-  console.log('Client connected');
-
-  ws.on('error', console.error);
-
-  ws.on('message', function message(data, isBinary) {
-    console.log('Received: %s', data);
-
-    // Broadcast to all other clients
-    server.clients.forEach(function each(client) {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(data, { binary: isBinary });
-      }
-    });
-  });
-
-  ws.send('Greeting from server!');
-  // Broadcast to all other clients
-  server.clients.forEach(function each(client) {
-    if (client !== ws && client.readyState === WebSocket.OPEN) {
-      client.send('New client connected!');
+const server = Bun.serve({
+  port: 3000,
+  //   serverName: 'Share/1.0',
+  fetch(req, server) {
+    // upgrade the request to a WebSocket
+    if (server.upgrade(req)) {
+      return // do not return a Response
     }
-  });
-});
+    return new Response('Upgrade failed', { status: 500 })
+  },
+  websocket: {
+    open(ws) {
+      // a socket is opened
+      console.log('Client connected')
+      ws.send('Greeting from the server!')
+      ws.subscribe('announcements')
+      ws.publishText('announcements', 'New client connected!')
+    },
+    message(ws, message) {
+      // a message is received
+      console.log('Received: %s', message)
+      ws.publish('announcements', message)
+    },
+    close(ws, code, message) {
+      // a socket is closed
+      ws.unsubscribe('announcements')
+    }
+    // drain(ws) {}, // the socket is ready to receive more data
+  }
+})
+
+console.log(`Server started at http://localhost:${server.port}`)
