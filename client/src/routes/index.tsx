@@ -2,17 +2,19 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 
 import { connect, useMessages } from '@/lib/data'
+import { socketQuery } from '@/lib/queries'
 import { Suspense } from 'react'
 
 export const Route = createFileRoute('/')({
   loader: ({ context: { queryClient } }) => {
-    queryClient.prefetchQuery({ queryKey: ['socket'], queryFn: connect })
+    void queryClient.prefetchQuery({ queryKey: ['socket'], queryFn: connect })
   },
   component: Index
 })
 
 function SocketMessages() {
-  const messages = useMessages()
+  const { data: socket } = useSuspenseQuery(socketQuery)
+  const messages = useMessages(socket)
 
   return (
     <div>
@@ -27,10 +29,7 @@ function SocketMessages() {
 }
 
 function SocketComponent() {
-  const { data: socket } = useSuspenseQuery({
-    queryKey: ['socket'],
-    queryFn: connect
-  })
+  const { data: socket } = useSuspenseQuery(socketQuery)
 
   console.log('Socket:', socket)
 

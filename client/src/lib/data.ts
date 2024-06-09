@@ -9,8 +9,9 @@ let socket = null as WebSocket | null
 
 // NOTE: Temporary buffer messages before we track them in state
 // TODO: Temporary solution until some sort of global state is implemented
-let messageBuffer: string[] = []
+const messageBuffer: string[] = []
 function bufferMessages(event: MessageEvent) {
+  if (typeof event.data !== 'string') return
   messageBuffer.push(event.data)
 }
 
@@ -63,14 +64,15 @@ export async function connect() {
   return socket as WebSocket | null
 }
 
-export function useMessages() {
+export function useMessages(socket: WebSocket | null) {
   const [messages, setMessages] = useState<string[]>([])
 
   useEffect(() => {
     if (!socket) return
 
     function handleMessage(event: MessageEvent) {
-      setMessages((prevMessages) => [...prevMessages, event.data])
+      if (typeof event.data !== 'string') return
+      setMessages((prevMessages) => [...prevMessages, event.data as string])
     }
     socket.addEventListener('message', handleMessage)
 
