@@ -44,7 +44,7 @@ function SocketComponent() {
 
   return (
     <div>
-      <button onClick={() => socket?.send('New message')}>Send message</button>
+      <button onClick={() => socket.send('New message')}>Send message</button>
       <SocketMessages />
     </div>
   )
