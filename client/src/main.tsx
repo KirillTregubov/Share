@@ -6,7 +6,13 @@ import './index.css'
 
 import { routeTree } from './routeTree.gen'
 
-export const queryClient = new QueryClient()
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false
+    }
+  }
+})
 
 const router = createRouter({
   routeTree,

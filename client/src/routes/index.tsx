@@ -1,23 +1,20 @@
-import {
-  Await,
-  CatchBoundary,
-  createFileRoute,
-  defer
-} from '@tanstack/react-router'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 
-import { connect, useMessages, useSocketClose } from '@/lib/data'
+import { connect, useMessages } from '@/lib/data'
+import { socketQuery } from '@/lib/queries'
+import { Suspense } from 'react'
 
 export const Route = createFileRoute('/')({
-  loader: () => {
-    return {
-      socket: defer(connect())
-    }
+  loader: ({ context: { queryClient } }) => {
+    void queryClient.prefetchQuery({ queryKey: ['socket'], queryFn: connect })
   },
   component: Index
 })
 
 function SocketMessages() {
-  const messages = useMessages()
+  const { data: socket } = useSuspenseQuery(socketQuery)
+  const messages = useMessages(socket)
 
   return (
     <div>
@@ -31,30 +28,38 @@ function SocketMessages() {
   )
 }
 
-function SocketComponent({ socket }: { socket: WebSocket }) {
-  useSocketClose()
+function SocketComponent() {
+  const { data: socket } = useSuspenseQuery(socketQuery)
+
+  console.log('Socket:', socket)
+
+  if (!socket) {
+    return (
+      <div>
+        <h2>WebSocket connection closed.</h2>
+        {/* TODO: Retry */}
+      </div>
+    )
+  }
 
   return (
     <div>
-      <button onClick={() => socket?.send('New message')}>Send message</button>
+      <button onClick={() => socket.send('New message')}>Send message</button>
       <SocketMessages />
     </div>
   )
 }
 
 function Index() {
-  const { socket } = Route.useLoaderData()
-
   return (
     <div>
       <h1>Home page</h1>
-      {/* Catch component: https://tanstack.com/router/latest/docs/framework/react/api/router/catchBoundaryComponent */}
+      {/* CatchBoundary: https://tanstack.com/router/latest/docs/framework/react/api/router/catchBoundaryComponent */}
       <CatchBoundary getResetKey={() => 'reset'}>
-        {/* Await component: https://tanstack.com/router/latest/docs/framework/react/api/router/awaitComponent */}
-        <Await promise={socket} fallback={<div>Connecting...</div>}>
-          {/* The promise resolved, so we have a socket */}
-          {(socket) => <SocketComponent socket={socket} />}
-        </Await>
+        {/* Suspense: https://react.dev/reference/react/Suspense */}
+        <Suspense fallback={<div>Connecting...</div>}>
+          <SocketComponent />
+        </Suspense>
       </CatchBoundary>
     </div>
   )

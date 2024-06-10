@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react'
 
+import { queryClient } from '@/main'
+
 const WS_URL = import.meta.env.VITE_WS_URL
 
+// NOTE: WebSocket connection singleton
 let socket = null as WebSocket | null
 
 // NOTE: Temporary buffer messages before we track them in state
-// Temporary solution until some sort of global state is implemented
-// NOTE: The greeting will be duplicated because React Strict Mode mounts every component twice in development
-let messageBuffer: string[] = []
+// TODO: Temporary solution until some sort of global state is implemented
+const messageBuffer: string[] = []
 function bufferMessages(event: MessageEvent) {
+  if (typeof event.data !== 'string') return
   messageBuffer.push(event.data)
 }
 
 export async function connect() {
   if (!socket) {
-    console.log('new socket')
+    console.log('Creating WebSocket connection...')
     socket = new WebSocket(WS_URL)
+
     socket.onopen = () => {
       console.log('WebSocket connected')
     }
@@ -27,28 +31,29 @@ export async function connect() {
     }
     socket.onclose = () => {
       console.log('WebSocket closed')
+      queryClient.setQueryData(['socket'], null)
       socket = null
-      // TODO: rerender dependent components when socket is closed
-      // TODO: notify and retry
     }
-    // TODO: Temporary
+
+    // TODO: Temporary message buffer
     socket.addEventListener('message', bufferMessages)
 
     // Wait for the connection to be established
     await new Promise<void>((resolve, reject) => {
-      const onOpen = async () => {
+      function onOpen() {
+        // async
         console.log('WebSocket connected')
         cleanUp()
         // TODO: Temporary delay to show loading state. This introduces lint errors!
         // await new Promise((resolve) => setTimeout(resolve, 1000))
         resolve()
       }
-      const onError = (error: Event) => {
+      function onError(error: Event) {
         console.error('WebSocket error:', error)
         cleanUp()
         reject(new Error('WebSocket connection failed! Is the server running?'))
       }
-      const cleanUp = () => {
+      function cleanUp() {
         socket!.removeEventListener('open', onOpen)
         socket!.removeEventListener('error', onError)
       }
@@ -57,50 +62,31 @@ export async function connect() {
       socket!.addEventListener('error', onError)
     })
   }
-  return socket
+  return socket as WebSocket | null
 }
 
-export function useMessages() {
+export function useMessages(socket: WebSocket | null) {
   const [messages, setMessages] = useState<string[]>([])
 
   useEffect(() => {
-    if (!socket) {
-      throw new Error('Socket is not connected!')
-    }
+    if (!socket) return
 
-    const handleMessage = (event: MessageEvent) => {
-      setMessages((prevMessages) => [...prevMessages, event.data])
+    function handleMessage(event: MessageEvent) {
+      if (typeof event.data !== 'string') return
+      setMessages((prevMessages) => [...prevMessages, event.data as string])
     }
     socket.addEventListener('message', handleMessage)
 
-    // TODO: Temporary
+    // TODO: Temporary message buffer
     socket.removeEventListener('message', bufferMessages)
     setMessages((prevMessages) => [...messageBuffer, ...prevMessages])
 
     return () => {
       if (!socket) return
       socket.removeEventListener('message', handleMessage)
+      setMessages([])
     }
   }, [socket])
 
   return messages
-}
-
-export function useSocketClose() {
-  useEffect(() => {
-    if (!socket) {
-      throw new Error('Socket is not connected!')
-    }
-
-    const onClose = () => {
-      // TODO: currently this just reloads the page. We should handle this more gracefully, e.g. show a notification and retry
-      router.invalidate()
-    }
-    socket.addEventListener('close', onClose)
-
-    return () => {
-      if (!socket) return
-      socket.removeEventListener('close', onClose)
-    }
-  }, [])
 }
