@@ -40,11 +40,12 @@ export async function connect() {
 
     // Wait for the connection to be established
     await new Promise<void>((resolve, reject) => {
-      async function onOpen() {
+      function onOpen() {
+        // async
         console.log('WebSocket connected')
         cleanUp()
         // TODO: Temporary delay to show loading state. This introduces lint errors!
-        await new Promise((resolve) => setTimeout(resolve, 1000))
+        // await new Promise((resolve) => setTimeout(resolve, 1000))
         resolve()
       }
       function onError(error: Event) {
