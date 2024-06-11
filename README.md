@@ -5,6 +5,8 @@
   <p align="center">
     In development.
   </p>
+  <p align="center">
+    <a href="https://github.com/users/KirillTregubov/projects/3">Project Board</a>
 </div>
 <br />
 
