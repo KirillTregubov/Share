@@ -1,0 +1,7 @@
+{
+    "name": "share-monorepo",
+    "private": true,
+    "workspaces": [
+        "./*"
+    ]
+}

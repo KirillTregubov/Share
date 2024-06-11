@@ -1,3 +1,5 @@
+import { UserSchema } from 'schemas'
+
 const server = Bun.serve({
   port: 3000,
   //   serverName: 'Share/1.0',
@@ -12,6 +14,11 @@ const server = Bun.serve({
     open(ws) {
       // a socket is opened
       console.log('Client connected')
+
+      // create user
+      const user = UserSchema.parse({ id: '1' })
+      console.log('User:', user)
+
       ws.send('Greeting from the server!')
       ws.subscribe('announcements')
       ws.publishText('announcements', 'New client connected!')

@@ -5,11 +5,14 @@
   "scripts": {
     "dev": "bun index.ts",
     "format": "prettier --write .",
-    "outdated": "npx npm-check-updates"
+    "outdated": "npx npm-check-updates -u"
+  },
+  "dependencies": {
+    "schemas": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "prettier": "^3.3.1"
+    "prettier": "^3.3.2"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
