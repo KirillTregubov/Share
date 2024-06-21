@@ -1,4 +1,9 @@
 import { UserSchema } from 'schemas'
+import crypto from 'crypto'
+
+let user: { id: string }
+
+const networkMap = new Map()
 
 const server = Bun.serve({
   port: 3000,
@@ -10,23 +15,36 @@ const server = Bun.serve({
     }
     return new Response('Upgrade failed', { status: 500 })
   },
+
   websocket: {
     open(ws) {
       // a socket is opened
       console.log('Client connected')
+      // is this the network?????
+      const network = ws.remoteAddress
 
-      // create user
-      const user = UserSchema.parse({ id: '1' })
-      console.log('User:', user)
+      const uuid = crypto.randomUUID()
 
-      ws.send('Greeting from the server!')
+      user = UserSchema.parse({
+        id: uuid
+      })
+
+
+        if (networkMap.has(network)) {
+          networkMap.get(network).push(user)
+        }else{
+          networkMap.set(network, [user])
+        }
+
+      ws.send(`Greetings new Client from the server!`)
       ws.subscribe('announcements')
-      ws.publishText('announcements', 'New client connected!')
+      ws.publishText('announcements', `New client connected! User: ${user.id}`)
     },
-    message(ws, message) {
+    async message(ws, message) {
       // a message is received
-      console.log('Received: %s', message)
-      ws.publish('announcements', message)
+
+      ws.send('I have sent a message')
+      ws.publish('announcements', `${user.id} has sent: ${message}`)
     },
     close(ws, code, message) {
       // a socket is closed

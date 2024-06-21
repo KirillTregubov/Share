@@ -4,6 +4,8 @@ import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 import { connect, useMessages } from '@/lib/data'
 import { socketQuery } from '@/lib/queries'
 import { Suspense } from 'react'
+import Messages from '@/component/Messages'
+
 
 export const Route = createFileRoute('/')({
   loader: ({ context: { queryClient } }) => {
@@ -15,13 +17,15 @@ export const Route = createFileRoute('/')({
 function SocketMessages() {
   const { data: socket } = useSuspenseQuery(socketQuery)
   const messages = useMessages(socket)
-
+  
   return (
     <div>
       <h2>Messages:</h2>
       <ul>
         {messages.map((message, index) => (
-          <li key={index}>{message}</li>
+          <div key={index}>
+            <Messages message={message}/>
+          </div>
         ))}
       </ul>
     </div>
