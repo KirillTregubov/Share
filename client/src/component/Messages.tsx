@@ -6,6 +6,10 @@ interface MessageProps {
 
 export default function Messages ({message}:MessageProps){
     return(
-        <div className=" relateive h-32 w-32 bg-blue-400"> {message} </div>
+        <div className="relative h-32 w-32">
+            <div className="absolute inset-x-0 bottom-0 h-32 w-32 bg-blue-400"> 
+                {message} 
+            </div>
+        </div>
     )
 }
