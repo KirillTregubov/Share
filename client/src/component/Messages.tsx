@@ -1,15 +1,13 @@
 interface MessageProps {
-    message:string
+    message: string
 }
 
 // animate-fadeOut
 
-export default function Messages ({message}:MessageProps){
-    return(
-        <div className="relative h-32 w-32">
-            <div className="absolute inset-x-0 bottom-0 h-32 w-32 bg-blue-400"> 
-                {message} 
-            </div>
+export default function Messages({ message }: MessageProps) {
+    return (
+        <div className="animate-fadeOut absolute bottom-0 inset-x-0 text-center rounded-full mx-72 my-4 bg-blue-400">
+            {message}
         </div>
     )
 }

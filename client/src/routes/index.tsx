@@ -19,9 +19,9 @@ function SocketMessages() {
   const messages = useMessages(socket)
   console.log(messages)
   return (
-    <div className='flex flex-col items-center justify-end min-h-screen'>
+    <div>
       <h2>Messages:</h2>
-      <ul >
+      <ul>
         {messages.map((message, index) => (
           <div key={index}>
             <Messages message={message}/>
