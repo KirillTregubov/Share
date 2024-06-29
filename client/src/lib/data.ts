@@ -24,6 +24,7 @@ export async function connect() {
       console.log('WebSocket connected')
     }
     socket.onmessage = (event) => {
+      console.log(event)
       console.log('Received:', event.data)
     }
     socket.onerror = (error) => {
