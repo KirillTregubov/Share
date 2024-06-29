@@ -35,8 +35,13 @@ const server = Bun.serve({
         }else{
           networkMap.set(network, [user])
         }
-
-      ws.send(`Greetings new Client from the server!`)
+      // I swear there is a better way than doing this
+      const greetingMessage = {
+        message: 'Greetings new Client from the server!',
+        userId: user.id
+      }
+      //WHY IS IT SENDING THE MESSAGE and displaying it in the client. But atleast in the console it shows that the message was recieved
+      ws.send(JSON.stringify(greetingMessage))
       ws.subscribe('announcements')
       ws.publishText('announcements', `New client connected! User: ${user.id}`)
     },
