@@ -42,7 +42,6 @@ const server = Bun.serve({
     },
     async message(ws, message) {
       // a message is received
-      console.log(ws.publish)
       ws.send('I have sent a message')
       ws.publish('announcements', `${user.id} has sent: ${message}`)
     },
