@@ -6,13 +6,12 @@ export default {
       keyframes: {
         fadeOut: {
           '0%': { opacity: 1 },
-          '100%': { opacity: 0 },
+          '100%': { opacity: 0 }
         }
       },
       animation: {
-        fadeOut: 'fadeOut 1s ease-in-out forwards', // You can adjust the duration and timing function
+        fadeOut: 'fadeOut 1s ease-in-out forwards' // You can adjust the duration and timing function
       }
-
     }
   },
   plugins: []

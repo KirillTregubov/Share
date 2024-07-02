@@ -29,12 +29,11 @@ const server = Bun.serve({
         id: uuid
       })
 
-
-        if (networkMap.has(network)) {
-          networkMap.get(network).push(user)
-        }else{
-          networkMap.set(network, [user])
-        }
+      if (networkMap.has(network)) {
+        networkMap.get(network).push(user)
+      } else {
+        networkMap.set(network, [user])
+      }
       // I swear there is a better way than doing this
       const greetingMessage = {
         message: 'Greetings new Client from the server!',

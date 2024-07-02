@@ -10,7 +10,7 @@ export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
 }>()({
   component: () => (
-    <div className='relative h-screen w-full flex flex-col items-center justify-center'>
+    <div className="relative flex h-screen w-full flex-col items-center justify-center">
       <nav className="flex gap-2 p-2">
         <Link to="/" className="[&.active]:font-bold">
           Home

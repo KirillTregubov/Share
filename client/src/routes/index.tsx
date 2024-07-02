@@ -1,11 +1,10 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 
+import Messages from '@/component/Messages'
 import { connect, useMessages } from '@/lib/data'
 import { socketQuery } from '@/lib/queries'
 import { Suspense } from 'react'
-import Messages from '@/component/Messages'
-
 
 export const Route = createFileRoute('/')({
   loader: ({ context: { queryClient } }) => {
@@ -24,7 +23,7 @@ function SocketMessages() {
       <ul>
         {messages.map((message, index) => (
           <div key={index}>
-            <Messages message={message}/>
+            <Messages message={message} />
           </div>
         ))}
       </ul>

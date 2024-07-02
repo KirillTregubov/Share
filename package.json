@@ -3,5 +3,8 @@
     "private": true,
     "workspaces": [
         "./*"
-    ]
+    ],
+    "scripts": {
+        "format": "cd server && npm run format && cd ../client && npm run format"
+    }
 }
