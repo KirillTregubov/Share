@@ -73,10 +73,19 @@ const server = Bun.serve({
         console.error('Received non-string message', message)
         return
       }
-      ws.send(
+
+      const connectionInfo = connectionMap.get(ws)
+      if (!connectionInfo) {
+        // TODO: triggered on outdated tab, cancel socket
+        console.error('Connection info not found for message', message)
+        return
+      }
+      const { network } = connectionInfo
+
+      server.publish(
+        network,
         JSON.stringify({ type: 'message', data: message } satisfies Message)
       )
-      // ws.publish('announcements', `${user.id} has sent: ${message}`)
     },
     close(ws, code, message) {
       // a socket is closed

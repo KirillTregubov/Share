@@ -1,21 +1,18 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useState } from 'react'
 
 import { queryClient } from '@/main'
-import { MessageSchema, type User } from 'schemas'
+import { MessageSchema } from 'schemas'
+import {
+  dangerouslySetUser,
+  peersQuery,
+  userLoaded,
+  userQuery
+} from './queries'
 
 const WS_URL = import.meta.env.VITE_WS_URL
 
 // NOTE: WebSocket connection singleton
 let socket = null as WebSocket | null
-
-let user: User | null = null
-const userNotifiers = new Set<() => void>()
-function subscribeToUser(notify: () => void) {
-  userNotifiers.add(notify)
-  return () => {
-    userNotifiers.delete(notify)
-  }
-}
 
 // NOTE: Temporary buffer messages before we track them in state
 // TODO: Temporary solution until some sort of global state is implemented
@@ -60,21 +57,29 @@ export async function connect() {
 
       const message = result.data
       switch (message.type) {
-        case 'client_self':
+        case 'client_self': {
           console.log('Connected as user', message.data)
-          user = message.data
+          const user = message.data
+          dangerouslySetUser(user)
+          queryClient.setQueryData(peersQuery.queryKey, (oldPeers) => {
+            return oldPeers?.filter((peer) => peer.id !== user.id) ?? []
+          })
           break
-        case 'client_connect':
-          if (user && user.id === message.data.id) return
+        }
+        case 'client_connect': {
+          const user = queryClient.getQueryData(userQuery.queryKey)
+          if (user && user.id === message.data.id) break
+
           console.log('Discovered peer', result.data)
-          queryClient.setQueryData(['peers'], (oldPeers: User[] | null) => {
+          queryClient.setQueryData(peersQuery.queryKey, (oldPeers) => {
             if (!oldPeers) return [message.data]
             return [...oldPeers, message.data]
           })
           break
+        }
         case 'client_disconnect':
           console.log('Disconnected peer', message.data)
-          queryClient.setQueryData(['peers'], (oldPeers: User[] | null) => {
+          queryClient.setQueryData(peersQuery.queryKey, (oldPeers) => {
             if (!oldPeers) return []
             return oldPeers.filter((peer) => peer.id !== message.data.id)
           })
@@ -85,72 +90,53 @@ export async function connect() {
         default:
           return assertUnreachable(message)
       }
-
-      if (message.type === 'client_self') {
-        console.log('Connected as user', message.data)
-        user = message.data
-      } else if (message.type === 'client_connect') {
-        if (user && user.id === message.data.id) return
-        console.log('Discovered peer', result.data)
-        queryClient.setQueryData(['peers'], (oldPeers: User[] | null) => {
-          if (!oldPeers) return [message.data]
-          return [...oldPeers, message.data]
-        })
-      } else if (message.type === 'client_disconnect') {
-        console.log('Disconnected peer', message.data)
-        queryClient.setQueryData(['peers'], (oldPeers: User[] | null) => {
-          if (!oldPeers) return []
-          return oldPeers.filter((peer) => peer.id !== message.data.id)
-        })
-      } else if (message.type === 'message') {
-        console.log('Received message', message.data)
-      }
     }
     socket.onerror = (error) => {
       console.error('WebSocket error:', error)
     }
-    socket.onclose = () => {
-      console.log('WebSocket closed')
+    socket.onclose = (event) => {
+      if (event.code === 4000) return //
       queryClient.setQueryData(['socket'], null)
       socket = null
     }
     window.addEventListener('beforeunload', () => {
-      socket?.close()
+      socket?.close(4000) // from https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.2
     })
 
     // TODO: Temporary message buffer
     socket.addEventListener('message', bufferMessages)
 
     // Wait for the connection to be established
-    await new Promise<void>((resolve, reject) => {
-      function onOpen() {
-        // async
-        console.log('WebSocket connected')
-        cleanUp()
-        // TODO: Temporary delay to show loading state. This introduces lint errors!
-        // await new Promise((resolve) => setTimeout(resolve, 1000))
-        resolve()
-      }
-      function onError(error: Event) {
-        console.error('WebSocket error:', error)
-        cleanUp()
-        reject(new Error('WebSocket connection failed! Is the server running?'))
-      }
-      function cleanUp() {
-        socket!.removeEventListener('open', onOpen)
-        socket!.removeEventListener('error', onError)
-      }
+    await Promise.allSettled([
+      new Promise<void>((resolve, reject) => {
+        function onOpen() {
+          // async
+          console.log('WebSocket connected')
+          cleanUp()
+          // TODO: Temporary delay to show loading state. This introduces lint errors!
+          // await new Promise((resolve) => setTimeout(resolve, 1000))
+          resolve()
+        }
+        function onError(error: Event) {
+          console.error('WebSocket error:', error)
+          cleanUp()
+          reject(
+            new Error('WebSocket connection failed! Is the server running?')
+          )
+        }
+        function cleanUp() {
+          socket!.removeEventListener('open', onOpen)
+          socket!.removeEventListener('error', onError)
+        }
 
-      socket!.addEventListener('open', onOpen)
-      socket!.addEventListener('error', onError)
-    })
+        socket!.addEventListener('open', onOpen)
+        socket!.addEventListener('error', onError)
+      }),
+      userLoaded
+    ])
   }
+  console.log('return connect')
   return socket as WebSocket | null
-}
-
-export function useUser() {
-  const store = useSyncExternalStore(subscribeToUser, () => user)
-  return store
 }
 
 export function useMessages(socket: WebSocket | null) {
