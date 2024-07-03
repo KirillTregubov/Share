@@ -25,7 +25,7 @@ const server = Bun.serve({
 
       const uuid = crypto.randomUUID()
 
-      user = UserSchema.parse({
+      const user = UserSchema.parse({
         id: uuid
       })
 
@@ -44,7 +44,7 @@ const server = Bun.serve({
       ws.subscribe('announcements')
       ws.publishText('announcements', `New client connected! User: ${user.id}`)
     },
-    async message(ws, message) {
+    message(ws, message) {
       // a message is received
       ws.send('I have sent a message')
       ws.publish('announcements', `${user.id} has sent: ${message}`)
