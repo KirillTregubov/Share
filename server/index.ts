@@ -1,7 +1,6 @@
 import { UserSchema } from 'schemas'
 import crypto from 'crypto'
 
-let user: { id: string }
 
 const networkMap = new Map()
 
@@ -47,7 +46,7 @@ const server = Bun.serve({
     message(ws, message) {
       // a message is received
       ws.send('I have sent a message')
-      ws.publish('announcements', `${user.id} has sent: ${message}`)
+      ws.publish('announcements', `someone has sent: ${message}`)
     },
     close(ws, code, message) {
       // a socket is closed
