@@ -1,11 +1,17 @@
-import { UserSchema } from 'schemas'
+import { UserSchema, type Message, type User } from 'schemas'
 import crypto from 'crypto'
+import type { ServerWebSocket } from 'bun'
 
 let user: { id: string }
 
-const networkMap = new Map()
+const networkMap: Map<string, Set<User>> = new Map()
+const connectionMap: Map<
+  ServerWebSocket<unknown>,
+  { user: User; network: string }
+> = new Map()
 
 const server = Bun.serve({
+  hostname: '0.0.0.0',
   port: 3000,
   //   serverName: 'Share/1.0',
   fetch(req, server) {
@@ -20,7 +26,6 @@ const server = Bun.serve({
     open(ws) {
       // a socket is opened
       console.log('Client connected')
-      // is this the network?????
       const network = ws.remoteAddress
 
       const uuid = crypto.randomUUID()
@@ -28,30 +33,74 @@ const server = Bun.serve({
       const user = UserSchema.parse({
         id: uuid
       })
+      console.log('Connecting', user)
 
       if (networkMap.has(network)) {
-        networkMap.get(network).push(user)
+        networkMap.get(network)!.add(user)
       } else {
-        networkMap.set(network, [user])
+        networkMap.set(network, new Set([user]))
       }
-      // I swear there is a better way than doing this
-      const greetingMessage = {
-        message: 'Greetings new Client from the server!',
-        userId: user.id
-      }
-      //WHY IS IT SENDING THE MESSAGE and displaying it in the client. But atleast in the console it shows that the message was recieved
-      ws.send(JSON.stringify(greetingMessage))
-      ws.subscribe('announcements')
-      ws.publishText('announcements', `New client connected! User: ${user.id}`)
+
+      connectionMap.set(ws, { user, network })
+
+      // subscribe to ip channel
+      ws.subscribe(network)
+
+      ws.send(
+        JSON.stringify({ type: 'client_self', data: user } satisfies Message)
+      )
+
+      // publish client information with channel
+      server.publish(
+        network,
+        JSON.stringify({ type: 'client_connect', data: user } satisfies Message)
+      )
+
+      // send all existing users to client
+      networkMap.get(network)!.forEach((networkUser) => {
+        if (networkUser.id === user.id) return
+        ws.send(
+          JSON.stringify({
+            type: 'client_connect',
+            data: networkUser
+          } satisfies Message)
+        )
+      })
     },
     message(ws, message) {
       // a message is received
-      ws.send('I have sent a message')
-      ws.publish('announcements', `${user.id} has sent: ${message}`)
+      if (typeof message !== 'string') {
+        console.error('Received non-string message', message)
+        return
+      }
+      ws.send(
+        JSON.stringify({ type: 'message', data: message } satisfies Message)
+      )
+      // ws.publish('announcements', `${user.id} has sent: ${message}`)
     },
     close(ws, code, message) {
       // a socket is closed
-      ws.unsubscribe('announcements')
+      console.log('Client disconnected')
+
+      const connectionInfo = connectionMap.get(ws)
+      if (!connectionInfo) return
+      const { user, network } = connectionInfo
+      console.log('Disconnecting', user)
+
+      server.publish(
+        network,
+        JSON.stringify({
+          type: 'client_disconnect',
+          data: user
+        } satisfies Message)
+      )
+
+      ws.unsubscribe(network)
+      if (networkMap.has(network)) {
+        networkMap.get(network)!.delete(user)
+      } else {
+        console.error('Network not found in map')
+      }
     }
     // drain(ws) {}, // the socket is ready to receive more data
   }

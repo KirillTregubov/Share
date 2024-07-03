@@ -1,9 +1,8 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 
-import Message from '@/components/Message'
-import { connect, useMessages } from '@/lib/data'
-import { socketQuery } from '@/lib/queries'
+import { connect, useUser } from '@/lib/data'
+import { peersQuery, socketQuery } from '@/lib/queries'
 import { Suspense } from 'react'
 
 export const Route = createFileRoute('/')({
@@ -14,19 +13,39 @@ export const Route = createFileRoute('/')({
 })
 
 function SocketMessages() {
-  const { data: socket } = useSuspenseQuery(socketQuery)
-  const messages = useMessages(socket)
-  console.log(messages)
+  // const { data: socket } = useSuspenseQuery(socketQuery)
+  const user = useUser()
+  const { data: peers } = useSuspenseQuery(peersQuery)
+  console.log('Peers:', peers)
+  // const messages = useMessages(socket)
+  // console.log(messages)
   return (
     <div>
-      <h2>Messages:</h2>
-      <ul>
+      <div>
+        <h2>This is user:</h2>
+        <pre>
+          <code>{JSON.stringify(user, null, 2)}</code>
+        </pre>
+      </div>
+      <div>
+        <h2>These are the peers:</h2>
+        {Array.from(peers).map((peer) => (
+          <div key={peer.id}>
+            <pre>
+              <code>{JSON.stringify(peer, null, 2)}</code>
+            </pre>
+          </div>
+        ))}
+      </div>
+
+      {/* <h2>Messages:</h2> */}
+      {/* <ul>
         {messages.map((message, index) => (
           <div key={index}>
             <Message message={message} />
           </div>
         ))}
-      </ul>
+      </ul> */}
     </div>
   )
 }
