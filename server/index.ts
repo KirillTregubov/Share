@@ -1,6 +1,58 @@
 import { UserSchema, type Message, type User } from 'schemas'
 import crypto from 'crypto'
 import type { ServerWebSocket } from 'bun'
+import {
+  animals,
+  colors,
+  uniqueNamesGenerator,
+  type Config
+} from 'unique-names-generator'
+import DeviceDetector from 'device-detector-js'
+
+const deviceDetector = new DeviceDetector()
+const nameConfig: Config = {
+  dictionaries: [colors, animals],
+  style: 'capital',
+  separator: ' ',
+  length: 2
+}
+
+// Based on https://www.rfc-editor.org/rfc/rfc1918#section-3
+function isPrivateIP(ip: string): boolean {
+  const ipParts = ip.split('.').map(Number)
+  if (ipParts.length !== 4) return false
+
+  const [first, second] = ipParts
+  return (
+    first === 10 || // 10.0.0.0/8
+    (first === 192 && second === 168) || // 192.168.0.0/16
+    (first === 172 && second >= 16 && second <= 31) // 172.16.0.0/12
+  )
+}
+
+function getDeviceName(userAgent: string | null) {
+  if (userAgent) {
+    const ua = deviceDetector.parse(userAgent)
+
+    let name = ''
+    if (ua.device?.model) {
+      name += ua.device.model
+    } else if (ua.os?.name) {
+      name += ua.os.name
+    }
+    if (ua.client?.name) {
+      name += ` (${ua.client.name
+        .replace('Chrome Mobile', 'Chrome')
+        .replace('Mobile Safari', 'Safari')})`
+    }
+
+    if (name.length > 0) {
+      return name
+    }
+  }
+
+  return 'Unknown Device'
+}
 
 const networkMap: Map<string, Set<User>> = new Map()
 const connectionMap: Map<
@@ -8,13 +60,19 @@ const connectionMap: Map<
   { user: User; network: string }
 > = new Map()
 
-const server = Bun.serve({
+type Data = { device: string }
+
+const server = Bun.serve<Data>({
   hostname: '0.0.0.0',
   port: 3000,
   //   serverName: 'Share/1.0',
   fetch(req, server) {
     // upgrade the request to a WebSocket
-    if (server.upgrade(req)) {
+    if (
+      server.upgrade(req, {
+        data: { device: getDeviceName(req.headers.get('user-agent')) }
+      })
+    ) {
       return // do not return a Response
     }
     return new Response('Upgrade failed', { status: 500 })
@@ -24,14 +82,15 @@ const server = Bun.serve({
     open(ws) {
       // a socket is opened
       console.log('Client connected')
-      const network = ws.remoteAddress
-
-      const uuid = crypto.randomUUID()
+      const network = isPrivateIP(ws.remoteAddress) ? 'local' : ws.remoteAddress
 
       const user = UserSchema.parse({
-        id: uuid
+        id: crypto.randomUUID(),
+        name: uniqueNamesGenerator(nameConfig),
+        device: ws.data.device,
+        network // for debugging
       })
-      console.log('Connecting', user)
+      console.log('Connecting', user, network)
 
       if (networkMap.has(network)) {
         networkMap.get(network)!.add(user)

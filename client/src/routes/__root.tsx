@@ -1,9 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import {
-  createRootRouteWithContext,
-  Link,
-  Outlet
-} from '@tanstack/react-router'
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router'
 // import { TanStackRouterDevtools } from '@tanstack/router-devtools'
 
 export const Route = createRootRouteWithContext<{
@@ -11,11 +7,11 @@ export const Route = createRootRouteWithContext<{
 }>()({
   component: () => (
     <div className="relative flex min-h-dvh w-full flex-col items-center justify-center">
-      <nav className="flex gap-2 p-2">
+      {/* <nav className="flex gap-2 p-2">
         <Link to="/" className="[&.active]:font-bold">
           Home
         </Link>
-      </nav>
+      </nav> */}
       <Outlet />
       {/* <ReactQueryDevtools /> */}
       {/* <TanStackRouterDevtools position="bottom-right" /> */}

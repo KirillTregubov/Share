@@ -8,7 +8,9 @@
     "outdated": "npx npm-check-updates -u"
   },
   "dependencies": {
-    "schemas": "workspace:*"
+    "device-detector-js": "^3.0.3",
+    "schemas": "workspace:*",
+    "unique-names-generator": "^4.7.1"
   },
   "devDependencies": {
     "@types/bun": "latest",

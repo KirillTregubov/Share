@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 
+import Peer from '@/components/Peer'
 import { connect } from '@/lib/data'
 import { peersQuery, socketQuery, userQuery } from '@/lib/queries'
 import { Suspense } from 'react'
@@ -21,21 +22,15 @@ function SocketMessages() {
   const { data: peers } = useSuspenseQuery(peersQuery)
 
   return (
-    <div className="rounded-lg bg-neutral-100 p-4">
-      <div className="mb-4">
-        <h2>Connected as user:</h2>
-        <pre>
-          <code>{JSON.stringify(user, null, 2)}</code>
-        </pre>
+    <div className="w-full">
+      <div className="mb-4 overflow-auto">
+        <h2>Connected as:</h2>
+        <Peer peer={user} />
       </div>
-      <div>
-        <h2>Peers:</h2>
+      <div className="rounded-lg bg-neutral-100 p-4">
+        <h2 className="font-medium">Peers</h2>
         {Array.from(peers).map((peer) => (
-          <div key={peer.id}>
-            <pre>
-              <code>{JSON.stringify(peer, null, 2)}</code>
-            </pre>
-          </div>
+          <Peer key={peer.id} peer={peer} />
         ))}
       </div>
 
@@ -66,19 +61,21 @@ function SocketComponent() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <button className="text-left" onClick={() => socket.send('New message')}>
+    <>
+      {/* <button className="text-left" onClick={() => socket.send('New message')}>
         Send message
-      </button>
+      </button> */}
       <SocketMessages />
-    </div>
+    </>
   )
 }
 
 function Index() {
   return (
-    <div>
-      <h1>Home page</h1>
+    <div className="w-full p-4">
+      <div className="mb-4 w-full text-center text-xl font-bold">
+        <h1>Share</h1>
+      </div>
       {/* CatchBoundary: https://tanstack.com/router/latest/docs/framework/react/api/router/catchBoundaryComponent */}
       <CatchBoundary getResetKey={() => 'reset'}>
         {/* Suspense: https://react.dev/reference/react/Suspense */}
