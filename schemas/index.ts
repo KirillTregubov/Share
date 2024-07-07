@@ -6,7 +6,7 @@ export const UserSchema = z.object({
     device: z.string(),
     network: z.string(), // for debugging
 })
-export type User = z.infer<typeof UserSchema>
+export type UserType = z.infer<typeof UserSchema>
 
 export const MessageSchema = z.discriminatedUnion("type", [
     z.object({
@@ -26,4 +26,4 @@ export const MessageSchema = z.discriminatedUnion("type", [
         data: z.string(),
     }),
 ])
-export type Message = z.infer<typeof MessageSchema>
+export type MessageType = z.infer<typeof MessageSchema>

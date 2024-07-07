@@ -1,7 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 
-import Peer from '@/components/Peer'
+import { Peer, User } from '@/components/User'
 import { connect } from '@/lib/data'
 import { peersQuery, socketQuery, userQuery } from '@/lib/queries'
 import { Suspense } from 'react'
@@ -14,10 +14,6 @@ export const Route = createFileRoute('/')({
 })
 
 function SocketMessages() {
-  // const { data: socket } = useSuspenseQuery(socketQuery)
-  // const messages = useMessages(socket)
-  // console.log(messages)
-
   const { data: user } = useSuspenseQuery(userQuery)
   const { data: peers } = useSuspenseQuery(peersQuery)
 
@@ -25,7 +21,7 @@ function SocketMessages() {
     <div className="w-full">
       <div className="mb-4 overflow-auto">
         <h2>Connected as:</h2>
-        <Peer peer={user} />
+        <User user={user} />
       </div>
       <div className="rounded-lg bg-neutral-100 p-4">
         <h2 className="font-medium">Peers</h2>
@@ -33,15 +29,6 @@ function SocketMessages() {
           <Peer key={peer.id} peer={peer} />
         ))}
       </div>
-
-      {/* <h2>Messages:</h2> */}
-      {/* <ul>
-        {messages.map((message, index) => (
-          <div key={index}>
-            <Message message={message} />
-          </div>
-        ))}
-      </ul> */}
     </div>
   )
 }

@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react'
-
 import { queryClient } from '@/main'
 import { MessageSchema } from 'schemas'
 import {
@@ -13,14 +11,6 @@ const WS_URL = import.meta.env.VITE_WS_URL
 
 // NOTE: WebSocket connection singleton
 let socket = null as WebSocket | null
-
-// NOTE: Temporary buffer messages before we track them in state
-// TODO: Temporary solution until some sort of global state is implemented
-const messageBuffer: string[] = []
-function bufferMessages(event: MessageEvent) {
-  if (typeof event.data !== 'string') return
-  messageBuffer.push(event.data)
-}
 
 function assertUnreachable(x: never): never {
   console.error('Reached unreachable code', x)
@@ -103,18 +93,12 @@ export async function connect() {
       socket?.close(4000) // from https://www.rfc-editor.org/rfc/rfc6455.html#section-7.4.2
     })
 
-    // TODO: Temporary message buffer
-    socket.addEventListener('message', bufferMessages)
-
     // Wait for the connection to be established
     await Promise.allSettled([
       new Promise<void>((resolve, reject) => {
         function onOpen() {
-          // async
           console.log('WebSocket connected')
           cleanUp()
-          // TODO: Temporary delay to show loading state. This introduces lint errors!
-          // await new Promise((resolve) => setTimeout(resolve, 1000))
           resolve()
         }
         function onError(error: Event) {
@@ -135,32 +119,6 @@ export async function connect() {
       userLoaded
     ])
   }
-  console.log('return connect')
+  console.log('return from connect')
   return socket as WebSocket | null
-}
-
-export function useMessages(socket: WebSocket | null) {
-  const [messages, setMessages] = useState<string[]>([])
-
-  useEffect(() => {
-    if (!socket) return
-
-    function handleMessage(event: MessageEvent) {
-      if (typeof event.data !== 'string') return
-      setMessages((prevMessages) => [...prevMessages, event.data as string])
-    }
-    socket.addEventListener('message', handleMessage)
-
-    // TODO: Temporary message buffer
-    socket.removeEventListener('message', bufferMessages)
-    setMessages((prevMessages) => [...messageBuffer, ...prevMessages])
-
-    return () => {
-      if (!socket) return
-      socket.removeEventListener('message', handleMessage)
-      setMessages([])
-    }
-  }, [socket])
-
-  return messages
 }
