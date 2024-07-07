@@ -2,7 +2,6 @@ import { UserSchema, type Message, type User } from 'schemas'
 import crypto from 'crypto'
 import type { ServerWebSocket } from 'bun'
 
-
 const networkMap: Map<string, Set<User>> = new Map()
 const connectionMap: Map<
   ServerWebSocket<unknown>,
