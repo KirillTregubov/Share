@@ -1,6 +1,6 @@
 import { queryClient } from '@/main'
 import { queryOptions } from '@tanstack/react-query'
-import type { User } from 'schemas'
+import type { UserType } from 'schemas'
 import { connect } from './data'
 
 export const socketQuery = queryOptions({
@@ -18,7 +18,7 @@ export const userLoaded = new Promise<void>((resolve, reject) => {
   )
 })
 
-export function dangerouslySetUser(user: User) {
+export function dangerouslySetUser(user: UserType) {
   queryClient.setQueryData(userQuery.queryKey, user)
   resolveUserPromise()
 }
@@ -27,13 +27,13 @@ export const userQuery = queryOptions({
   queryKey: ['user'],
   queryFn: async () => {
     await userLoaded
-    return queryClient.getQueryData(['user'])! satisfies User
+    return queryClient.getQueryData(['user'])! satisfies UserType
   },
   staleTime: Infinity
 })
 
 export const peersQuery = queryOptions({
   queryKey: ['peers'],
-  queryFn: () => [] as User[],
+  queryFn: () => [] as UserType[],
   staleTime: Infinity
 })

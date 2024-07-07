@@ -1,4 +1,4 @@
-import { UserSchema, type Message, type User } from 'schemas'
+import { UserSchema, type MessageType, type UserType } from 'schemas'
 import crypto from 'crypto'
 import type { ServerWebSocket } from 'bun'
 import {
@@ -54,10 +54,10 @@ function getDeviceName(userAgent: string | null) {
   return 'Unknown Device'
 }
 
-const networkMap: Map<string, Set<User>> = new Map()
+const networkMap: Map<string, Set<UserType>> = new Map()
 const connectionMap: Map<
   ServerWebSocket<unknown>,
-  { user: User; network: string }
+  { user: UserType; network: string }
 > = new Map()
 
 type Data = { device: string }
@@ -104,13 +104,19 @@ const server = Bun.serve<Data>({
       ws.subscribe(network)
 
       ws.send(
-        JSON.stringify({ type: 'client_self', data: user } satisfies Message)
+        JSON.stringify({
+          type: 'client_self',
+          data: user
+        } satisfies MessageType)
       )
 
       // publish client information with channel
       server.publish(
         network,
-        JSON.stringify({ type: 'client_connect', data: user } satisfies Message)
+        JSON.stringify({
+          type: 'client_connect',
+          data: user
+        } satisfies MessageType)
       )
 
       // send all existing users to client
@@ -120,7 +126,7 @@ const server = Bun.serve<Data>({
           JSON.stringify({
             type: 'client_connect',
             data: networkUser
-          } satisfies Message)
+          } satisfies MessageType)
         )
       })
     },
@@ -143,7 +149,7 @@ const server = Bun.serve<Data>({
 
       server.publish(
         network,
-        JSON.stringify({ type: 'message', data: message } satisfies Message)
+        JSON.stringify({ type: 'message', data: message } satisfies MessageType)
       )
     },
     close(ws, code, message) {
@@ -160,7 +166,7 @@ const server = Bun.serve<Data>({
         JSON.stringify({
           type: 'client_disconnect',
           data: user
-        } satisfies Message)
+        } satisfies MessageType)
       )
 
       ws.unsubscribe(network)
