@@ -1,4 +1,10 @@
-import { UserSchema, type MessageType, type UserType } from 'schemas'
+import {
+  ClientMessageSchema,
+  UserSchema,
+  type UserIDType,
+  type ServerMessageType,
+  type UserType
+} from 'schemas'
 import crypto from 'crypto'
 import type { ServerWebSocket } from 'bun'
 import {
@@ -54,13 +60,13 @@ function getDeviceName(userAgent: string | null) {
   return 'Unknown Device'
 }
 
-const networkMap: Map<string, Set<UserType>> = new Map()
+const networkMap: Map<string, Map<UserIDType, UserType>> = new Map()
 const connectionMap: Map<
-  ServerWebSocket<unknown>,
-  { user: UserType; network: string }
+  string,
+  { user: UserType; network: string; ws: ServerWebSocket<unknown> }
 > = new Map()
 
-type Data = { device: string }
+type Data = { id: string; device: string }
 
 const server = Bun.serve<Data>({
   hostname: '0.0.0.0',
@@ -70,7 +76,10 @@ const server = Bun.serve<Data>({
     // upgrade the request to a WebSocket
     if (
       server.upgrade(req, {
-        data: { device: getDeviceName(req.headers.get('user-agent')) }
+        data: {
+          id: crypto.randomUUID(),
+          device: getDeviceName(req.headers.get('user-agent'))
+        }
       })
     ) {
       return // do not return a Response
@@ -85,7 +94,7 @@ const server = Bun.serve<Data>({
       const network = isPrivateIP(ws.remoteAddress) ? 'local' : ws.remoteAddress
 
       const user = UserSchema.parse({
-        id: crypto.randomUUID(),
+        id: ws.data.id,
         name: uniqueNamesGenerator(nameConfig),
         device: ws.data.device,
         network // for debugging
@@ -93,12 +102,12 @@ const server = Bun.serve<Data>({
       console.log('Connecting', user, network)
 
       if (networkMap.has(network)) {
-        networkMap.get(network)!.add(user)
+        networkMap.get(network)!.set(user.id, user)
       } else {
-        networkMap.set(network, new Set([user]))
+        networkMap.set(network, new Map([[user.id, user]]))
       }
 
-      connectionMap.set(ws, { user, network })
+      connectionMap.set(ws.data.id, { user, network, ws })
 
       // subscribe to ip channel
       ws.subscribe(network)
@@ -107,7 +116,7 @@ const server = Bun.serve<Data>({
         JSON.stringify({
           type: 'client_self',
           data: user
-        } satisfies MessageType)
+        } satisfies ServerMessageType)
       )
 
       // publish client information with channel
@@ -116,7 +125,7 @@ const server = Bun.serve<Data>({
         JSON.stringify({
           type: 'client_connect',
           data: user
-        } satisfies MessageType)
+        } satisfies ServerMessageType)
       )
 
       // send all existing users to client
@@ -126,37 +135,85 @@ const server = Bun.serve<Data>({
           JSON.stringify({
             type: 'client_connect',
             data: networkUser
-          } satisfies MessageType)
+          } satisfies ServerMessageType)
         )
       })
     },
     message(ws, message) {
       // a message is received
-      ws.send('I have sent a message')
-      ws.publish('announcements', `someone has sent: ${message}`)
+      // console.log('Received message', message)
+
       if (typeof message !== 'string') {
         console.error('Received non-string message', message)
         return
       }
 
-      const connectionInfo = connectionMap.get(ws)
-      if (!connectionInfo) {
-        // TODO: triggered on outdated tab, cancel socket
-        console.error('Connection info not found for message', message)
+      try {
+        message = JSON.parse(message)
+      } catch (e) {
+        console.log('Received unknown message:', message)
+        return // TODO: handle malformed JSON
+      }
+
+      const result = ClientMessageSchema.safeParse(message)
+      if (!result.success) {
+        console.error(
+          'Received invalid message',
+          message,
+          'with error:',
+          result.error
+        )
         return
       }
-      const { network } = connectionInfo
-
-      server.publish(
-        network,
-        JSON.stringify({ type: 'message', data: message } satisfies MessageType)
+      const clientMessage = result.data as any
+      console.log(
+        'Received message',
+        clientMessage.type,
+        'to:',
+        clientMessage.to
       )
+
+      // handle disconnect
+
+      if (!clientMessage.to) return
+      const recipientConnection = connectionMap.get(clientMessage.to)
+      if (!recipientConnection) return
+
+      delete clientMessage.to
+      clientMessage.sender = ws.data.id
+
+      recipientConnection.ws.send(JSON.stringify(clientMessage))
+      return
+
+      // ws.send('I have sent a message')
+      // ws.publish('announcements', `someone has sent: ${message}`)
+      // if (typeof message !== 'string') {
+      //   console.error('Received non-string message', message)
+      //   return
+      // }
+
+      // const connectionInfo = connectionMap.get(ws)
+      // if (!connectionInfo) {
+      //   // TODO: triggered on outdated tab, cancel socket
+      //   console.error('Connection info not found for message', message)
+      //   return
+      // }
+      // const { network } = connectionInfo
+
+      // server.publish(
+      //   network,
+      //   JSON.stringify({
+      //     type: 'message',
+      //     data: message
+      //   } satisfies ServerMessageType)
+      // )
     },
     close(ws, code, message) {
       // a socket is closed
       console.log('Client disconnected')
 
-      const connectionInfo = connectionMap.get(ws)
+      const id = ws.data.id
+      const connectionInfo = connectionMap.get(id)
       if (!connectionInfo) return
       const { user, network } = connectionInfo
       console.log('Disconnecting', user)
@@ -166,12 +223,12 @@ const server = Bun.serve<Data>({
         JSON.stringify({
           type: 'client_disconnect',
           data: user
-        } satisfies MessageType)
+        } satisfies ServerMessageType)
       )
 
       ws.unsubscribe(network)
       if (networkMap.has(network)) {
-        networkMap.get(network)!.delete(user)
+        networkMap.get(network)!.delete(id)
       } else {
         console.error('Network not found in map')
       }

@@ -13,7 +13,7 @@ export const Route = createFileRoute('/')({
   component: Index
 })
 
-function SocketMessages() {
+function PeerList() {
   const { data: user } = useSuspenseQuery(userQuery)
   const { data: peers } = useSuspenseQuery(peersQuery)
 
@@ -25,7 +25,7 @@ function SocketMessages() {
       </div>
       <div className="rounded-lg bg-neutral-100 p-4">
         <h2 className="font-medium">Peers</h2>
-        {Array.from(peers).map((peer) => (
+        {Array.from(peers.values()).map((peer) => (
           <Peer key={peer.id} peer={peer} />
         ))}
       </div>
@@ -52,7 +52,7 @@ function SocketComponent() {
       {/* <button className="text-left" onClick={() => socket.send('New message')}>
         Send message
       </button> */}
-      <SocketMessages />
+      <PeerList />
     </>
   )
 }

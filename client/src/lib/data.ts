@@ -1,11 +1,12 @@
 import { queryClient } from '@/main'
-import { MessageSchema } from 'schemas'
+import { ServerMessageSchema, type ClientMessageType } from 'schemas'
 import {
   dangerouslySetUser,
   peersQuery,
   userLoaded,
   userQuery
 } from './queries'
+import type { ClientUserType } from './schemas'
 
 const WS_URL = import.meta.env.VITE_WS_URL
 
@@ -26,7 +27,7 @@ export async function connect() {
       console.log('WebSocket connected')
     }
     socket.onmessage = (event) => {
-      console.log(event)
+      // console.log(event)
       console.log('Received:', event.data)
 
       if (typeof event.data !== 'string') {
@@ -34,7 +35,7 @@ export async function connect() {
         return
       }
 
-      const result = MessageSchema.safeParse(JSON.parse(event.data))
+      const result = ServerMessageSchema.safeParse(JSON.parse(event.data))
       if (result.error) {
         console.error(
           'Invalid message received',
@@ -51,8 +52,10 @@ export async function connect() {
           console.log('Connected as user', message.data)
           const user = message.data
           dangerouslySetUser(user)
-          queryClient.setQueryData(peersQuery.queryKey, (oldPeers) => {
-            return oldPeers?.filter((peer) => peer.id !== user.id) ?? []
+          queryClient.setQueryData(peersQuery.queryKey, (peers) => {
+            if (!peers) peers = new Map()
+            peers.delete(user.id)
+            return peers
           })
           break
         }
@@ -60,23 +63,203 @@ export async function connect() {
           const user = queryClient.getQueryData(userQuery.queryKey)
           if (user && user.id === message.data.id) break
 
-          console.log('Discovered peer', result.data)
-          queryClient.setQueryData(peersQuery.queryKey, (oldPeers) => {
-            if (!oldPeers) return [message.data]
-            return [...oldPeers, message.data]
+          const peers = queryClient.getQueryData(peersQuery.queryKey)
+          if (peers?.has(message.data.id)) break
+
+          console.log('Discovered peer', message)
+          const peer = message.data as ClientUserType
+
+          // peer._connection = new RTCPeerConnection({
+          //   // peerIdentity: peer.id,
+          //   iceServers: [
+          //     {
+          //       urls: 'stun:stun.l.google.com:19302'
+          //     }
+          //   ]
+          // })
+          // peer._connection.onicecandidate = (e) => {
+          //   if (!e.candidate) return
+
+          //   console.log('ICE send signal', e.candidate)
+          //   const signal = {
+          //     type: 'signal-ice',
+          //     to: peer.id,
+          //     ice: e.candidate
+          //   } satisfies ClientMessageType
+          //   socket!.send(JSON.stringify(signal))
+          // }
+          // peer._connection.onconnectionstatechange = (e) => {
+          //   if (!peer._connection) return
+          //   console.log(
+          //     'RTC: state changed:',
+          //     peer._connection!.connectionState
+          //   )
+          //   switch (peer._connection.connectionState) {
+          //     case 'disconnected':
+          //       peer._connection.close()
+          //       // this._onChannelClosed();
+
+          //       // TODO: retry connection
+          //       break
+          //     case 'failed':
+          //       peer._connection.close()
+          //       // this._conn = null;
+          //       // this._onChannelClosed();
+          //       break
+          //   }
+          // }
+          // peer._connection.oniceconnectionstatechange = (e) => {
+          //   console.log(
+          //     'ICE state changed:',
+          //     peer._connection!.iceConnectionState
+          //   )
+          //   //   switch (this._conn.iceConnectionState) {
+          //   //     case 'failed':
+          //   //         console.error('ICE Gathering failed');
+          //   //         break;
+          //   //     default:
+          //   //         console.log('ICE Gathering', this._conn.iceConnectionState);
+          //   // }
+          // }
+
+          // console.log('CREATE DATA CHANNEL - CREATE OFFER')
+          // const channel = peer._connection.createDataChannel('data-channel', {
+          //   ordered: true
+          //   // reliable: true // Obsolete. See https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel/reliable
+          // })
+          // channel.onopen = (e) => {
+          //   console.log('Data channel opened', e)
+          // }
+          // peer._connection
+          //   .createOffer()
+          //   .then((d) => {
+          //     if (!peer._connection) return
+          //     peer._connection
+          //       .setLocalDescription(d)
+          //       .then((_) => {
+          //         console.log('send initial signal', d)
+
+          //         const signal = {
+          //           type: 'signal-sdp',
+          //           to: peer.id,
+          //           sdp: d
+          //         } satisfies ClientMessageType
+          //         socket!.send(JSON.stringify(signal))
+          //       })
+          //       .catch((e) => {
+          //         console.error('Failed to set local description', e)
+          //       })
+          //   })
+          //   .catch((e) => {
+          //     throw new Error('Failed to create offer', e as Error)
+          //   })
+          // // peer._connection = connection
+          // console.log('Created connection', peer._connection)
+
+          queryClient.setQueryData(peersQuery.queryKey, (peers) => {
+            if (!peers) peers = new Map()
+            peers.set(peer.id, peer)
+            return peers
           })
           break
         }
         case 'client_disconnect':
           console.log('Disconnected peer', message.data)
-          queryClient.setQueryData(peersQuery.queryKey, (oldPeers) => {
-            if (!oldPeers) return []
-            return oldPeers.filter((peer) => peer.id !== message.data.id)
+          queryClient.setQueryData(peersQuery.queryKey, (peers) => {
+            peers?.delete(message.data.id)
+            return peers
           })
           break
         case 'message':
           console.log('Received message', message.data)
           break
+        case 'signal-sdp':
+          if (!message.sender) break
+          console.log('Received signal sdp', message.sender)
+
+          const peers = queryClient.getQueryData(peersQuery.queryKey)
+          const peer = peers?.get(message.sender)
+          if (!peer) break
+
+          if (!peer._connection) {
+            // TODO: make connection if it doesn't exist?
+            console.error(
+              'NO PEER CONNECTION YET. received signal sdp',
+              message
+            )
+            break
+          }
+
+          // console.log('State', peer._connection.connectionState)
+          console.log('Type', message.sdp.type)
+
+          if (message.sdp.type === 'offer') {
+            peer._connection
+              .setRemoteDescription(new RTCSessionDescription(message.sdp))
+              .then(() => {
+                if (!peer._connection) return
+                if (message.sdp.type !== 'offer') return
+
+                console.log('State', peer._connection.connectionState)
+
+                peer._connection.createAnswer().then((d) => {
+                  if (!peer._connection) return
+
+                  peer._connection
+                    .setLocalDescription(d)
+                    .then(() => {
+                      console.log('send answer signal', d)
+
+                      const signal = {
+                        type: 'signal-sdp',
+                        to: peer.id,
+                        sdp: d
+                      } satisfies ClientMessageType
+                      socket!.send(JSON.stringify(signal))
+                      console.log('sent')
+                    })
+                    .catch((e) => {
+                      console.error('Failed to set local description', e)
+                    })
+                })
+              })
+              .catch((e) => {
+                console.error(e)
+              })
+          } else if (message.sdp.type === 'answer') {
+            peer._connection
+              .setRemoteDescription(new RTCSessionDescription(message.sdp))
+              .then(() => {
+                if (!peer._connection) {
+                  console.error('no peerconnection')
+                  return
+                }
+                console.log('State', peer._connection.connectionState)
+              })
+              .catch((e) => {
+                console.error(e)
+                throw new Error('Failed to set remote description')
+              })
+          }
+          break
+        case 'signal-ice': {
+          if (!message.sender) break
+          console.log('Received signal ice', message.sender)
+
+          const peers = queryClient.getQueryData(peersQuery.queryKey)
+          const peer = peers?.get(message.sender)
+          if (!peer) break
+
+          if (!peer._connection) {
+            // TODO: make connection if it doesn't exist?
+            console.error('No connection for received signal sdp', message)
+            // maybe addIceCandidate(null) ?
+            break
+          }
+
+          peer._connection.addIceCandidate(new RTCIceCandidate(message.ice))
+          break
+        }
         default:
           return assertUnreachable(message)
       }
