@@ -3,6 +3,7 @@ import { ServerMessageSchema, type ClientMessageType } from 'schemas'
 import {
   dangerouslySetUser,
   peersQuery,
+  socketQuery,
   userLoaded,
   userQuery
 } from './queries'
@@ -28,7 +29,7 @@ export async function connect() {
     }
     socket.onmessage = (event) => {
       // console.log(event)
-      console.log('Received:', event.data)
+      // console.log('Received:', event.data)
 
       if (typeof event.data !== 'string') {
         console.error('Received non-string message', event.data)
@@ -53,9 +54,10 @@ export async function connect() {
           const user = message.data
           dangerouslySetUser(user)
           queryClient.setQueryData(peersQuery.queryKey, (peers) => {
-            if (!peers) peers = new Map()
-            peers.delete(user.id)
-            return peers
+            if (!peers) return peers
+            const newPeers = new Map(peers)
+            newPeers.delete(user.id)
+            return newPeers
           })
           break
         }
@@ -158,16 +160,18 @@ export async function connect() {
 
           queryClient.setQueryData(peersQuery.queryKey, (peers) => {
             if (!peers) peers = new Map()
-            peers.set(peer.id, peer)
-            return peers
+            return new Map(peers).set(peer.id, peer)
           })
+
           break
         }
         case 'client_disconnect':
           console.log('Disconnected peer', message.data)
           queryClient.setQueryData(peersQuery.queryKey, (peers) => {
-            peers?.delete(message.data.id)
-            return peers
+            if (!peers) return peers
+            const newPeers = new Map(peers)
+            newPeers.delete(message.data.id)
+            return newPeers
           })
           break
         case 'message':
@@ -269,7 +273,7 @@ export async function connect() {
     }
     socket.onclose = (event) => {
       if (event.code === 4000) return //
-      queryClient.setQueryData(['socket'], null)
+      queryClient.setQueryData(socketQuery.queryKey, null)
       socket = null
     }
     window.addEventListener('beforeunload', () => {
@@ -302,6 +306,5 @@ export async function connect() {
       userLoaded
     ])
   }
-  console.log('return from connect')
   return socket as WebSocket | null
 }

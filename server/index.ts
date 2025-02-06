@@ -71,7 +71,7 @@ type Data = { id: string; device: string }
 const server = Bun.serve<Data>({
   hostname: '0.0.0.0',
   port: 3000,
-  //   serverName: 'Share/1.0',
+  serverName: 'Share/1.0',
   fetch(req, server) {
     // upgrade the request to a WebSocket
     if (

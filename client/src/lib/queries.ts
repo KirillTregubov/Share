@@ -35,6 +35,5 @@ export const userQuery = queryOptions({
 
 export const peersQuery = queryOptions({
   queryKey: ['peers'],
-  initialData: new Map<UserIDType, ClientUserType>(),
-  staleTime: Infinity
+  initialData: new Map<UserIDType, ClientUserType>()
 })
