@@ -44,6 +44,7 @@ export const User = forwardRef<
         <h2 className="font-medium">{user.name}</h2>
         <h3 className="font-light text-neutral-800">{user.device}</h3>
         <h3 className="font-light text-neutral-800">{user.network}</h3>
+        <h3 className="font-light text-neutral-800">{user.id}</h3>
       </div>
       {children}
     </div>

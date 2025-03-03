@@ -1,10 +1,10 @@
-import { useSuspenseQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
+import { Suspense } from 'react'
 
 import { Peer, User } from '@/components/User'
 import { connect } from '@/lib/data'
 import { peersQuery, socketQuery, userQuery } from '@/lib/queries'
-import { Suspense } from 'react'
 
 export const Route = createFileRoute('/')({
   loader: ({ context: { queryClient } }) => {
@@ -13,9 +13,9 @@ export const Route = createFileRoute('/')({
   component: Index
 })
 
-function SocketMessages() {
+function PeerList() {
   const { data: user } = useSuspenseQuery(userQuery)
-  const { data: peers } = useSuspenseQuery(peersQuery)
+  const { data: peers } = useQuery(peersQuery)
 
   return (
     <div className="w-full">
@@ -25,7 +25,7 @@ function SocketMessages() {
       </div>
       <div className="rounded-lg bg-neutral-100 p-4">
         <h2 className="font-medium">Peers</h2>
-        {Array.from(peers).map((peer) => (
+        {Array.from(peers.values()).map((peer) => (
           <Peer key={peer.id} peer={peer} />
         ))}
       </div>
@@ -35,8 +35,7 @@ function SocketMessages() {
 
 function SocketComponent() {
   const { data: socket } = useSuspenseQuery(socketQuery)
-
-  console.log('Socket:', socket)
+  // console.log('Socket:', socket)
 
   if (!socket) {
     return (
@@ -52,7 +51,7 @@ function SocketComponent() {
       {/* <button className="text-left" onClick={() => socket.send('New message')}>
         Send message
       </button> */}
-      <SocketMessages />
+      <PeerList />
     </>
   )
 }

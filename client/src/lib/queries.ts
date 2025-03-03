@@ -1,7 +1,8 @@
 import { queryClient } from '@/main'
 import { queryOptions } from '@tanstack/react-query'
-import type { UserType } from 'schemas'
+import { type UserIDType, type UserType } from 'schemas'
 import { connect } from './data'
+import type { ClientUserType } from './schemas'
 
 export const socketQuery = queryOptions({
   queryKey: ['socket'],
@@ -34,6 +35,5 @@ export const userQuery = queryOptions({
 
 export const peersQuery = queryOptions({
   queryKey: ['peers'],
-  queryFn: () => [] as UserType[],
-  staleTime: Infinity
+  initialData: new Map<UserIDType, ClientUserType>()
 })
