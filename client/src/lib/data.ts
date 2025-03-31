@@ -1,5 +1,5 @@
 import { queryClient } from '@/main'
-import { ServerMessageSchema, type ClientMessageType } from 'schemas'
+import { ServerMessageSchema } from 'schemas'
 import {
   dangerouslySetUser,
   peersQuery,
@@ -177,148 +177,153 @@ export async function connect() {
         case 'message':
           console.log('Received message', message.data)
           break
-        case 'signal-sdp':
-          if (!message.sender) break
-          console.log('Received signal sdp', message.sender)
+        // case 'signal-sdp':
+        //   if (!message.sender) break
+        //   console.log('Received signal sdp', message.sender)
 
-          const peers = queryClient.getQueryData(peersQuery.queryKey)
-          const peer = peers?.get(message.sender)
-          if (!peer) break
+        //   const peers = queryClient.getQueryData(peersQuery.queryKey)
+        //   const peer = peers?.get(message.sender)
+        //   if (!peer) break
 
-          if (!peer._connection) {
-            // TODO: make connection if it doesn't exist?
-            console.error(
-              'NO PEER CONNECTION YET. received signal sdp',
-              message
-            )
+        //   if (!peer._connection) {
+        //     // TODO: make connection if it doesn't exist?
+        //     console.error(
+        //       'NO PEER CONNECTION YET. received signal sdp',
+        //       message
+        //     )
 
-            // console.log('Creating peer connection')
-            // peer._connection = new RTCPeerConnection({
-            //   // peerIdentity: peer.id,
-            //   iceServers: [
-            //     {
-            //       urls: 'stun:stun.l.google.com:19302'
-            //     }
-            //   ]
-            // })
-            // peer._connection.onicecandidate = (e) => {
-            //   if (!e.candidate) return
+        //     // console.log('Creating peer connection')
+        //     // peer._connection = new RTCPeerConnection({
+        //     //   // peerIdentity: peer.id,
+        //     //   iceServers: [
+        //     //     {
+        //     //       urls: 'stun:stun.l.google.com:19302'
+        //     //     }
+        //     //   ]
+        //     // })
+        //     // peer._connection.onicecandidate = (e) => {
+        //     //   if (!e.candidate) return
 
-            //   console.log('ICE send signal', e.candidate)
-            //   //   const signal = {
-            //   //     type: 'signal-ice',
-            //   //     to: peer.id,
-            //   //     ice: e.candidate
-            //   //   } satisfies ClientMessageType
-            //   //   socket!.send(JSON.stringify(signal))
-            // }
-            // peer._connection.onconnectionstatechange = (e) => {
-            //   if (!peer._connection) return
-            //   console.log(
-            //     'RTC: state changed:',
-            //     peer._connection!.connectionState
-            //   )
-            //   //   switch (peer._connection.connectionState) {
-            //   //     case 'disconnected':
-            //   //       peer._connection.close()
-            //   //       // this._onChannelClosed();
+        //     //   console.log('ICE send signal', e.candidate)
+        //     //   //   const signal = {
+        //     //   //     type: 'signal-ice',
+        //     //   //     to: peer.id,
+        //     //   //     ice: e.candidate
+        //     //   //   } satisfies ClientMessageType
+        //     //   //   socket!.send(JSON.stringify(signal))
+        //     // }
+        //     // peer._connection.onconnectionstatechange = (e) => {
+        //     //   if (!peer._connection) return
+        //     //   console.log(
+        //     //     'RTC: state changed:',
+        //     //     peer._connection!.connectionState
+        //     //   )
+        //     //   //   switch (peer._connection.connectionState) {
+        //     //   //     case 'disconnected':
+        //     //   //       peer._connection.close()
+        //     //   //       // this._onChannelClosed();
 
-            //   //       // TODO: retry connection
-            //   //       break
-            //   //     case 'failed':
-            //   //       peer._connection.close()
-            //   //       // this._conn = null;
-            //   //       // this._onChannelClosed();
-            //   //       break
-            //   //   }
-            //   // }
-            //   // peer._connection.oniceconnectionstatechange = (e) => {
-            //   //   console.log(
-            //   //     'ICE state changed:',
-            //   //     peer._connection!.iceConnectionState
-            //   //   )
-            //   //   //   switch (this._conn.iceConnectionState) {
-            //   //   //     case 'failed':
-            //   //   //         console.error('ICE Gathering failed');
-            //   //   //         break;
-            //   //   //     default:
-            //   //   //         console.log('ICE Gathering', this._conn.iceConnectionState);
-            //   //   // }
-            // }
+        //     //   //       // TODO: retry connection
+        //     //   //       break
+        //     //   //     case 'failed':
+        //     //   //       peer._connection.close()
+        //     //   //       // this._conn = null;
+        //     //   //       // this._onChannelClosed();
+        //     //   //       break
+        //     //   //   }
+        //     //   // }
+        //     //   // peer._connection.oniceconnectionstatechange = (e) => {
+        //     //   //   console.log(
+        //     //   //     'ICE state changed:',
+        //     //   //     peer._connection!.iceConnectionState
+        //     //   //   )
+        //     //   //   //   switch (this._conn.iceConnectionState) {
+        //     //   //   //     case 'failed':
+        //     //   //   //         console.error('ICE Gathering failed');
+        //     //   //   //         break;
+        //     //   //   //     default:
+        //     //   //   //         console.log('ICE Gathering', this._conn.iceConnectionState);
+        //     //   //   // }
+        //     // }
 
-            break
-          }
+        //     break
+        //   }
 
-          // console.log('State', peer._connection.connectionState)
-          console.log('Type', message.sdp.type)
+        //   // console.log('State', peer._connection.connectionState)
+        //   console.log('Type', message.sdp.type)
 
-          if (message.sdp.type === 'offer') {
-            peer._connection
-              .setRemoteDescription(new RTCSessionDescription(message.sdp))
-              .then(() => {
-                if (!peer._connection) return
-                if (message.sdp.type !== 'offer') return
+        //   if (message.sdp.type === 'offer') {
+        //     peer._connection
+        //       .setRemoteDescription(new RTCSessionDescription(message.sdp))
+        //       .then(() => {
+        //         if (!peer._connection) return
+        //         if (message.sdp.type !== 'offer') return
 
-                console.log('State', peer._connection.connectionState)
+        //         console.log('State', peer._connection.connectionState)
 
-                peer._connection.createAnswer().then((d) => {
-                  if (!peer._connection) return
+        //         peer._connection.createAnswer().then((d) => {
+        //           if (!peer._connection) return
 
-                  peer._connection
-                    .setLocalDescription(d)
-                    .then(() => {
-                      console.log('send answer signal', d)
+        //           peer._connection
+        //             .setLocalDescription(d)
+        //             .then(() => {
+        //               console.log('send answer signal', d)
 
-                      const signal = {
-                        type: 'signal-sdp',
-                        to: peer.id,
-                        sdp: d
-                      } satisfies ClientMessageType
-                      socket!.send(JSON.stringify(signal))
-                      console.log('sent')
-                    })
-                    .catch((e) => {
-                      console.error('Failed to set local description', e)
-                    })
-                })
-              })
-              .catch((e) => {
-                console.error(e)
-              })
-          } else if (message.sdp.type === 'answer') {
-            peer._connection
-              .setRemoteDescription(new RTCSessionDescription(message.sdp))
-              .then(() => {
-                if (!peer._connection) {
-                  console.error('no peerconnection')
-                  return
-                }
-                console.log('State', peer._connection.connectionState)
-              })
-              .catch((e) => {
-                console.error(e)
-                throw new Error('Failed to set remote description')
-              })
-          }
+        //               const signal = {
+        //                 type: 'signal-sdp',
+        //                 to: peer.id,
+        //                 sdp: d
+        //               } satisfies ClientMessageType
+        //               socket!.send(JSON.stringify(signal))
+        //               console.log('sent')
+        //             })
+        //             .catch((e) => {
+        //               console.error('Failed to set local description', e)
+        //             })
+        //         })
+        //       })
+        //       .catch((e) => {
+        //         console.error(e)
+        //       })
+        //   } else if (message.sdp.type === 'answer') {
+        //     peer._connection
+        //       .setRemoteDescription(new RTCSessionDescription(message.sdp))
+        //       .then(() => {
+        //         if (!peer._connection) {
+        //           console.error('no peerconnection')
+        //           return
+        //         }
+        //         console.log('State', peer._connection.connectionState)
+        //       })
+        //       .catch((e) => {
+        //         console.error(e)
+        //         throw new Error('Failed to set remote description')
+        //       })
+        //   }
+        //   break
+        // case 'signal-ice': {
+        //   if (!message.sender) break
+        //   console.log('Received signal ice', message.sender)
+
+        //   const peers = queryClient.getQueryData(peersQuery.queryKey)
+        //   const peer = peers?.get(message.sender)
+        //   if (!peer) break
+
+        //   if (!peer._connection) {
+        //     // TODO: make connection if it doesn't exist?
+        //     console.error('No connection for received signal sdp', message)
+        //     // maybe addIceCandidate(null) ?
+        //     break
+        //   }
+
+        //   peer._connection.addIceCandidate(new RTCIceCandidate(message.ice))
+        //   break
+        // }
+        case 'rtc_offer':
+        case 'rtc_answer':
+        case 'rtc_ice_candidate':
+          // Handle WebRTC signaling messages
           break
-        case 'signal-ice': {
-          if (!message.sender) break
-          console.log('Received signal ice', message.sender)
-
-          const peers = queryClient.getQueryData(peersQuery.queryKey)
-          const peer = peers?.get(message.sender)
-          if (!peer) break
-
-          if (!peer._connection) {
-            // TODO: make connection if it doesn't exist?
-            console.error('No connection for received signal sdp', message)
-            // maybe addIceCandidate(null) ?
-            break
-          }
-
-          peer._connection.addIceCandidate(new RTCIceCandidate(message.ice))
-          break
-        }
         default:
           return assertUnreachable(message)
       }

@@ -11,6 +11,26 @@ export const UserSchema = z.object({
 })
 export type UserType = z.infer<typeof UserSchema>
 
+
+export const ClientMessageSchema = z.discriminatedUnion("type", [
+    z.object({
+        type: z.literal('rtc_offer'),
+        to: UserIDSchema,
+        data: z.any()
+    }),
+    z.object({
+        type: z.literal('rtc_answer'),
+        to: UserIDSchema,
+        data: z.any()
+    }),
+    z.object({
+        type: z.literal('rtc_ice_candidate'),
+        to: UserIDSchema,
+        data: z.any()
+    }),
+])
+export type ClientMessageType = z.infer<typeof ClientMessageSchema>
+
 export const ServerMessageSchema = z.discriminatedUnion("type", [
     z.object({
         type: z.literal('client_self'),
@@ -28,29 +48,6 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
         type: z.literal('message'),
         data: z.string(),
     }),
-    z.object({
-        type: z.literal('signal-ice'),
-        sender: UserIDSchema,
-        ice: z.any()
-    }),
-    z.object({
-        type: z.literal('signal-sdp'),
-        sender: UserIDSchema,
-        sdp: z.any()
-    }),
+    ...ClientMessageSchema.options,
 ])
 export type ServerMessageType = z.infer<typeof ServerMessageSchema>
-
-export const ClientMessageSchema = z.discriminatedUnion("type", [
-    z.object({
-        type: z.literal('signal-ice'),
-        to: UserIDSchema,
-        ice: z.any()
-    }),
-    z.object({
-        type: z.literal('signal-sdp'),
-        to: UserIDSchema,
-        sdp: z.any()
-    }),
-])
-export type ClientMessageType = z.infer<typeof ClientMessageSchema>
