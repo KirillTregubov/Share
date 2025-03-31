@@ -7,6 +7,17 @@ let selectedPeerId = null;
 let peerConnection = null;
 let dataChannel = null;
 let fileToSend = null;
+
+// Reliable file transfer variables
+let currentTransferId = '';
+let sentChunks = {}; // Track sent chunks by sequence: { sequence: { sent: bool, acked: bool } }
+let receivedChunks = {}; // Track received chunks by sequence
+let totalChunksToReceive = 0;
+let currentChunkSequence = null;
+let retryTimeoutId = null;
+let missingChunksCheckInterval = null;
+
+// In-memory fallback (when IndexedDB not available)
 let receivedFileChunks = [];
 let receivedFileName = '';
 let receivedFileType = '';
@@ -24,6 +35,256 @@ const fileInput = document.getElementById('fileInput');
 const sendFileBtn = document.getElementById('sendFileBtn');
 const fileTransferProgress = document.getElementById('fileTransferProgress');
 const receivedFilesElement = document.getElementById('receivedFiles');
+
+// IndexedDB setup for file chunk storage
+const DB_NAME = 'FileTransferDB';
+const CHUNK_STORE = 'chunks';
+const META_STORE = 'metadata';
+let db = null;
+
+// Initialize IndexedDB
+function initDatabase() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      console.warn('IndexedDB not supported, falling back to in-memory storage');
+      resolve(null);
+      return;
+    }
+
+    const request = indexedDB.open(DB_NAME, 1);
+    
+    request.onerror = (event) => {
+      console.error('IndexedDB error:', event.target.error);
+      resolve(null); // Fall back to in-memory
+    };
+    
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      
+      // Create chunk store with transferId and sequence as compound key
+      if (!db.objectStoreNames.contains(CHUNK_STORE)) {
+        const chunkStore = db.createObjectStore(CHUNK_STORE, { keyPath: ['transferId', 'sequence'] });
+        chunkStore.createIndex('transferId', 'transferId', { unique: false });
+      }
+      
+      // Create metadata store
+      if (!db.objectStoreNames.contains(META_STORE)) {
+        const metaStore = db.createObjectStore(META_STORE, { keyPath: 'transferId' });
+      }
+    };
+    
+    request.onsuccess = (event) => {
+      db = event.target.result;
+      console.log('IndexedDB initialized successfully');
+      resolve(db);
+    };
+  });
+}
+
+// Store a chunk in IndexedDB
+function storeChunk(transferId, sequence, data) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve(false);
+      return;
+    }
+    
+    try {
+      const transaction = db.transaction([CHUNK_STORE], 'readwrite');
+      const store = transaction.objectStore(CHUNK_STORE);
+      
+      const chunk = {
+        transferId,
+        sequence,
+        data,
+        timestamp: Date.now()
+      };
+      
+      const request = store.put(chunk);
+      
+      request.onsuccess = () => resolve(true);
+      request.onerror = (e) => {
+        console.error('Error storing chunk:', e.target.error);
+        resolve(false);
+      };
+    } catch (e) {
+      console.error('Exception storing chunk:', e);
+      resolve(false);
+    }
+  });
+}
+
+// Store file metadata in IndexedDB
+function storeFileMetadata(metadata) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve(false);
+      return;
+    }
+    
+    try {
+      const transaction = db.transaction([META_STORE], 'readwrite');
+      const store = transaction.objectStore(META_STORE);
+      
+      const request = store.put({
+        ...metadata,
+        receivedChunks: 0,
+        status: 'in_progress',
+        timestamp: Date.now()
+      });
+      
+      request.onsuccess = () => resolve(true);
+      request.onerror = (e) => {
+        console.error('Error storing metadata:', e.target.error);
+        resolve(false);
+      };
+    } catch (e) {
+      console.error('Exception storing metadata:', e);
+      resolve(false);
+    }
+  });
+}
+
+// Get all chunks for a transfer
+function getChunks(transferId) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve([]);
+      return;
+    }
+    
+    try {
+      const transaction = db.transaction([CHUNK_STORE], 'readonly');
+      const store = transaction.objectStore(CHUNK_STORE);
+      const index = store.index('transferId');
+      
+      const request = index.getAll(transferId);
+      
+      request.onsuccess = () => {
+        const chunks = request.result;
+        resolve(chunks.sort((a, b) => a.sequence - b.sequence));
+      };
+      
+      request.onerror = (e) => {
+        console.error('Error getting chunks:', e.target.error);
+        resolve([]);
+      };
+    } catch (e) {
+      console.error('Exception getting chunks:', e);
+      resolve([]);
+    }
+  });
+}
+
+// Delete a completed transfer
+function deleteTransfer(transferId) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve(false);
+      return;
+    }
+    
+    try {
+      // Delete chunks
+      let transaction = db.transaction([CHUNK_STORE], 'readwrite');
+      let store = transaction.objectStore(CHUNK_STORE);
+      let index = store.index('transferId');
+      
+      const chunksRequest = index.getAllKeys(transferId);
+      
+      chunksRequest.onsuccess = () => {
+        const keys = chunksRequest.result;
+        
+        // Delete each chunk
+        const chunkTransaction = db.transaction([CHUNK_STORE], 'readwrite');
+        const chunkStore = chunkTransaction.objectStore(CHUNK_STORE);
+        
+        keys.forEach(key => {
+          chunkStore.delete(key);
+        });
+        
+        // Delete metadata
+        const metaTransaction = db.transaction([META_STORE], 'readwrite');
+        const metaStore = metaTransaction.objectStore(META_STORE);
+        metaStore.delete(transferId);
+        
+        resolve(true);
+      };
+      
+      chunksRequest.onerror = (e) => {
+        console.error('Error deleting transfer:', e.target.error);
+        resolve(false);
+      };
+    } catch (e) {
+      console.error('Exception deleting transfer:', e);
+      resolve(false);
+    }
+  });
+}
+
+// Mark a transfer as completed
+function completeTransfer(transferId) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve(false);
+      return;
+    }
+    
+    try {
+      // Delete chunks (we still delete chunks to save space)
+      let transaction = db.transaction([CHUNK_STORE], 'readwrite');
+      let store = transaction.objectStore(CHUNK_STORE);
+      let index = store.index('transferId');
+      
+      const chunksRequest = index.getAllKeys(transferId);
+      
+      chunksRequest.onsuccess = () => {
+        const keys = chunksRequest.result;
+        
+        // Delete each chunk
+        const chunkTransaction = db.transaction([CHUNK_STORE], 'readwrite');
+        const chunkStore = chunkTransaction.objectStore(CHUNK_STORE);
+        
+        keys.forEach(key => {
+          chunkStore.delete(key);
+        });
+        
+        // Update metadata status to completed
+        const metaTransaction = db.transaction([META_STORE], 'readwrite');
+        const metaStore = metaTransaction.objectStore(META_STORE);
+        
+        const getRequest = metaStore.get(transferId);
+        
+        getRequest.onsuccess = () => {
+          const metadata = getRequest.result;
+          if (metadata) {
+            metadata.status = 'completed';
+            metadata.completedAt = Date.now();
+            metaStore.put(metadata);
+            console.log(`Transfer ${transferId} marked as completed`);
+            resolve(true);
+          } else {
+            console.warn(`Cannot update status: Transfer ${transferId} not found`);
+            resolve(false);
+          }
+        };
+        
+        getRequest.onerror = (e) => {
+          console.error('Error getting metadata:', e.target.error);
+          resolve(false);
+        };
+      };
+      
+      chunksRequest.onerror = (e) => {
+        console.error('Error completing transfer:', e.target.error);
+        resolve(false);
+      };
+    } catch (e) {
+      console.error('Exception completing transfer:', e);
+      resolve(false);
+    }
+  });
+}
 
 // Connect to WebSocket server
 function connectWebSocket() {
@@ -66,7 +327,7 @@ function updateStatus(status) {
 }
 
 // Handle signaling messages
-function handleSignalingMessage(message) {
+async function handleSignalingMessage(message) {
   // console.log('Handling signaling message:', message.type, message);
   switch (message.type) {
     case 'client_self':
@@ -122,6 +383,18 @@ function handleSignalingMessage(message) {
     case 'rtc_ice_candidate':
       console.log('Received ICE candidate from:', message.sender);
       handleICECandidate(message.sender, message.data);
+      break;
+    
+    case 'transfer-complete':
+      // Sender indicates all chunks sent
+      console.log('Sender marked transfer as complete, checking for missing chunks...');
+      const missingChunks = findMissingChunks();
+      if (missingChunks.length === 0) {
+        await assembleAndSaveFile();
+      } else {
+        console.log(`Missing ${missingChunks.length} chunks, requesting them...`);
+        requestMissingChunks(missingChunks);
+      }
       break;
     
     default:
@@ -288,6 +561,10 @@ function setupDataChannel(channel) {
     console.log('Data channel closed');
     updateStatus('Data channel closed');
     sendFileBtn.disabled = true;
+    
+    // Clean up any ongoing transfers
+    clearTimeout(retryTimeoutId);
+    clearInterval(missingChunksCheckInterval);
   };
   
   dataChannel.onerror = (error) => {
@@ -295,96 +572,358 @@ function setupDataChannel(channel) {
     updateStatus('Data channel error occurred');
   };
   
-  dataChannel.onmessage = (event) => {
-    // Handle received file chunks or metadata
+  dataChannel.onmessage = async (event) => {
     const data = event.data;
     
-    // If it's a string, it's probably metadata
+    // Handle string messages (metadata, control messages)
     if (typeof data === 'string') {
       try {
-        const metadata = JSON.parse(data);
-        if (metadata.type === 'file-metadata') {
-          console.log('Receiving file:', metadata.name, 'size:', metadata.size);
-          // Start receiving a new file
-          receivedFileName = metadata.name;
-          receivedFileType = metadata.fileType;
-          receivedFileSize = metadata.size;
-          receivedBytes = 0;
-          receivedFileChunks = [];
-          
-          // Update progress bar
-          fileTransferProgress.value = 0;
-          fileTransferProgress.max = 100;
-          updateStatus(`Receiving file: ${metadata.name}`);
+        const message = JSON.parse(data);
+        
+        switch (message.type) {
+          case 'file-metadata':
+            // Start receiving a new file
+            console.log('Receiving file:', message.name, 'size:', message.size);
+            
+            // Clear any existing transfer
+            clearTimeout(retryTimeoutId);
+            clearInterval(missingChunksCheckInterval);
+            
+            // Setup new transfer
+            currentTransferId = message.transferId || `transfer-${Date.now()}`;
+            receivedFileName = message.name;
+            receivedFileType = message.fileType;
+            receivedFileSize = message.size;
+            totalChunksToReceive = message.totalChunks;
+            receivedBytes = 0;
+            receivedChunks = {};
+            
+            // Store metadata
+            await storeFileMetadata({
+              transferId: currentTransferId,
+              name: receivedFileName,
+              fileType: receivedFileType,
+              size: receivedFileSize,
+              totalChunks: totalChunksToReceive,
+              chunkSize: message.chunkSize || 16384
+            });
+            
+            // Use in-memory fallback if needed
+            if (!db) {
+              receivedFileChunks = [];
+            }
+            
+            // Start tracking for missing chunks
+            startMissingChunksCheck();
+            
+            // Update progress bar
+            fileTransferProgress.value = 0;
+            fileTransferProgress.max = 100;
+            updateStatus(`Receiving file: ${receivedFileName}`);
+            break;
+            
+          case 'chunk-metadata':
+            // Prepare to receive next chunk data
+            currentChunkSequence = message.sequence;
+            break;
+            
+          case 'chunk-ack':
+            // Sender received acknowledgment of a chunk
+            if (sentChunks[message.sequence]) {
+              sentChunks[message.sequence].acked = true;
+            }
+            break;
+            
+          case 'retry-request':
+            // Receiver is requesting a missing chunk
+            console.log(`Received retry request for chunk ${message.sequence}`);
+            if (message.transferId === currentTransferId) {
+              sendChunk(message.sequence);
+            }
+            break;
+            
+          case 'transfer-complete':
+            // Sender indicates all chunks sent
+            console.log('Sender marked transfer as complete, checking for missing chunks...');
+
+            const missingChunks = findMissingChunks();
+            if (missingChunks.length === 0) {
+              await assembleAndSaveFile();
+            } else {
+              console.log(`Missing ${missingChunks.length} chunks, requesting them...`);
+              requestMissingChunks(missingChunks);
+            }
+            break;
+            
+          default:
+            console.log('Unhandled message type:', message.type);
         }
       } catch (error) {
-        console.error('Error parsing file metadata:', error);
+        console.error('Error processing message:', error);
       }
     } else {
-      // It's a file chunk, add it to the chunks array
-      receivedFileChunks.push(data);
-      
-      // Ensure we're getting a valid size from ArrayBuffer or Blob
-      let chunkSize = 0;
-      if (data instanceof ArrayBuffer) {
-        chunkSize = data.byteLength;
-      } else if (data instanceof Blob) {
-        chunkSize = data.size;
+      // Binary data - must be a file chunk
+      if (currentChunkSequence !== null) {
+        // Process and store the chunk
+        const sequence = currentChunkSequence;
+        currentChunkSequence = null;
+        
+        // Ensure we're getting a valid size from ArrayBuffer or Blob
+        let chunkSize = 0;
+        if (data instanceof ArrayBuffer) {
+          chunkSize = data.byteLength;
+        } else if (data instanceof Blob) {
+          chunkSize = data.size;
+        } else {
+          console.warn('Received unknown data type:', typeof data);
+          chunkSize = data.byteLength || data.size || 0;
+        }
+        
+        receivedBytes += chunkSize;
+        receivedChunks[sequence] = true;
+        
+        // Store in IndexedDB if available, otherwise in memory
+        const storedInDb = await storeChunk(currentTransferId, sequence, data);
+        
+        if (!storedInDb) {
+          // Fallback to memory storage
+          if (!db) {
+            receivedFileChunks[sequence] = data;
+          }
+        }
+        
+        // Send acknowledgment
+        sendChunkAcknowledgment(sequence);
+        
+        // Log progress periodically and update metadata
+        if (Object.keys(receivedChunks).length % 10 === 0) {
+          console.log(`Received ${Object.keys(receivedChunks).length}/${totalChunksToReceive} chunks (${receivedBytes}/${receivedFileSize} bytes)`);
+          
+          // Update metadata with current progress
+          if (db && currentTransferId) {
+            const receivedCount = Object.keys(receivedChunks).length;
+            updateReceivedChunksCount(currentTransferId, receivedCount)
+              .catch(error => console.error('Failed to update received chunks count:', error));
+          }
+        }
+        
+        // Update progress - ensure we have a valid number calculation
+        let progress = 0;
+        if (receivedFileSize > 0) {
+          progress = Math.min(100, Math.floor((receivedBytes / receivedFileSize) * 100));
+        }
+        fileTransferProgress.value = progress;
+        
+        // If we've received all expected chunks, assemble the file
+        if (totalChunksToReceive > 0 && 
+            Object.keys(receivedChunks).length >= totalChunksToReceive) {
+          console.log('Received all chunks, assembling file');
+          await assembleAndSaveFile();
+        }
       } else {
-        console.warn('Received unknown data type:', typeof data);
-        chunkSize = 0;
-      }
-      
-      receivedBytes += chunkSize;
-      
-      if (receivedFileChunks.length % 10 === 0) {
-        console.log(`Received ${receivedFileChunks.length} chunks (${receivedBytes}/${receivedFileSize} bytes)`);
-      }
-      
-      // Update progress - ensure we have a valid number calculation
-      let progress = 0;
-      if (receivedFileSize > 0) {
-        progress = Math.min(100, Math.floor((receivedBytes / receivedFileSize) * 100));
-      }
-      fileTransferProgress.value = progress;
-      
-      // If we've received all the data, assemble the file
-      if (receivedBytes >= receivedFileSize) {
-        console.log('File transfer complete, assembling file');
-        assembleReceivedFile();
+        console.warn('Received binary data but no chunk sequence was set');
       }
     }
   };
 }
 
-// Assemble received file chunks into a complete file
-function assembleReceivedFile() {
-  console.log('Assembling received file from', receivedFileChunks.length, 'chunks');
-  const fileBlob = new Blob(receivedFileChunks, { type: receivedFileType });
-  const fileUrl = URL.createObjectURL(fileBlob);
+// Send acknowledgment for a received chunk
+function sendChunkAcknowledgment(sequence) {
+  if (!dataChannel || dataChannel.readyState !== 'open') return;
   
-  console.log('File assembled:', receivedFileName, fileBlob.size, 'bytes');
+  const ack = {
+    type: 'chunk-ack',
+    transferId: currentTransferId,
+    sequence: sequence
+  };
   
-  // Add file to the list of received files
-  const fileItem = document.createElement('li');
+  try {
+    dataChannel.send(JSON.stringify(ack));
+  } catch (error) {
+    console.error('Error sending chunk acknowledgment:', error);
+  }
+}
+
+// Start checking for missing chunks periodically
+function startMissingChunksCheck() {
+  // Clear any existing interval
+  clearInterval(missingChunksCheckInterval);
   
-  const fileLink = document.createElement('a');
-  fileLink.href = fileUrl;
-  fileLink.textContent = receivedFileName;
-  fileLink.download = receivedFileName;
+  // Check every 5 seconds
+  missingChunksCheckInterval = setInterval(() => {
+    if (totalChunksToReceive > 0) {
+      const missing = findMissingChunks();
+      if (missing.length > 0) {
+        console.log(`Found ${missing.length} missing chunks, requesting them...`);
+        requestMissingChunks(missing);
+      }
+    }
+  }, 5000);
+}
+
+// Update received chunks count in metadata
+function updateReceivedChunksCount(transferId, count) {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve(false);
+      return;
+    }
+    
+    try {
+      const transaction = db.transaction([META_STORE], 'readwrite');
+      const store = transaction.objectStore(META_STORE);
+      
+      const getRequest = store.get(transferId);
+      
+      getRequest.onsuccess = () => {
+        const metadata = getRequest.result;
+        if (metadata) {
+          metadata.receivedChunks = count;
+          metadata.lastUpdated = Date.now();
+          store.put(metadata);
+          resolve(true);
+        } else {
+          console.warn(`Cannot update chunks count: Transfer ${transferId} not found`);
+          resolve(false);
+        }
+      };
+      
+      getRequest.onerror = (e) => {
+        console.error('Error getting metadata for update:', e.target.error);
+        resolve(false);
+      };
+    } catch (e) {
+      console.error('Exception updating received chunks count:', e);
+      resolve(false);
+    }
+  });
+}
+
+// Find missing chunks in the sequence
+function findMissingChunks() {
+  if (totalChunksToReceive <= 0) return [];
   
-  fileItem.appendChild(fileLink);
-  fileItem.appendChild(document.createTextNode(` (${formatFileSize(receivedFileSize)})`));
+  const missing = [];
+  for (let i = 0; i < totalChunksToReceive; i++) {
+    if (!receivedChunks[i]) {
+      missing.push(i);
+    }
+  }
   
-  receivedFilesElement.appendChild(fileItem);
-  updateStatus(`File received: ${receivedFileName}`);
+  // Update the received chunks count in metadata
+  if (db && currentTransferId) {
+    const receivedCount = Object.keys(receivedChunks).length;
+    updateReceivedChunksCount(currentTransferId, receivedCount)
+      .catch(error => console.error('Failed to update received chunks count:', error));
+  }
   
-  // Reset file transfer state
+  return missing;
+}
+
+// Request missing chunks from the sender
+function requestMissingChunks(missingSequences) {
+  if (!dataChannel || dataChannel.readyState !== 'open') return;
+  
+  // Only request up to 10 chunks at a time to avoid flooding
+  const toRequest = missingSequences.slice(0, 10);
+  
+  toRequest.forEach(sequence => {
+    const request = {
+      type: 'retry-request',
+      transferId: currentTransferId,
+      sequence: sequence
+    };
+    
+    try {
+      dataChannel.send(JSON.stringify(request));
+    } catch (error) {
+      console.error('Error requesting missing chunk:', error);
+    }
+  });
+  
+  // Schedule another request for the remaining chunks if needed
+  if (missingSequences.length > 10) {
+    setTimeout(() => {
+      requestMissingChunks(missingSequences.slice(10));
+    }, 1000);
+  }
+}
+
+// Assemble file from chunks and save it
+async function assembleAndSaveFile() {
+  console.log('Assembling file from chunks...');
+  
+  // Clean up any ongoing retry checks
+  clearInterval(missingChunksCheckInterval);
+  
+  try {
+    let fileBlob;
+    
+    // Assemble from IndexedDB if available
+    if (db) {
+      console.log('Assembling from IndexedDB', currentTransferId);
+      console.log('exists?', db);
+
+      const chunks = await getChunks(currentTransferId);
+      console.log(`Retrieved ${chunks.length} chunks from IndexedDB`);
+      
+      if (chunks.length === 0) {
+        // Fallback to memory if no chunks in DB
+        fileBlob = new Blob(receivedFileChunks, { type: receivedFileType });
+      } else {
+        // Extract just the data from each chunk object
+        const chunkData = chunks.map(chunk => chunk.data);
+        fileBlob = new Blob(chunkData, { type: receivedFileType });
+      }
+    } else {
+      // Assemble from memory
+      fileBlob = new Blob(receivedFileChunks, { type: receivedFileType });
+    }
+    
+    console.log('File assembled:', receivedFileName, fileBlob.size, 'bytes');
+    
+    // Create download link
+    const fileUrl = URL.createObjectURL(fileBlob);
+    const fileItem = document.createElement('li');
+    const fileLink = document.createElement('a');
+    
+    fileLink.href = fileUrl;
+    fileLink.textContent = receivedFileName;
+    fileLink.download = receivedFileName;
+    
+    fileItem.appendChild(fileLink);
+    fileItem.appendChild(document.createTextNode(` (${formatFileSize(fileBlob.size)})`));
+    
+    receivedFilesElement.appendChild(fileItem);
+    updateStatus(`File received: ${receivedFileName}`);
+    
+    // Mark transfer as completed instead of deleting it
+    if (db) {
+      console.log('Marking transfer as completed in IndexedDB', currentTransferId);
+      await completeTransfer(currentTransferId);
+    }
+    
+    // Reset file transfer state
+    resetReceiveState();
+    
+  } catch (error) {
+    console.error('Error assembling file:', error);
+    updateStatus('Error assembling file');
+  }
+}
+
+// Reset file receive state
+function resetReceiveState() {
   receivedFileChunks = [];
   receivedFileName = '';
   receivedFileType = '';
   receivedFileSize = 0;
   receivedBytes = 0;
+  receivedChunks = {};
+  totalChunksToReceive = 0;
+  currentTransferId = '';
+  currentChunkSequence = null;
+  clearInterval(missingChunksCheckInterval);
 }
 
 // Create an offer to establish WebRTC connection
@@ -591,22 +1130,31 @@ function sendFile() {
   
   console.log('Sending file:', file.name, file.size, 'bytes');
   
+  // Create transfer ID and setup tracking
+  currentTransferId = `transfer-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+  sentChunks = {};
+  
+  // Calculate total chunks
+  const chunkSize = 16 * 1024; // 16 KB chunks
+  const totalChunks = Math.ceil(file.size / chunkSize);
+  
   // First, send file metadata
   const metadata = {
     type: 'file-metadata',
+    transferId: currentTransferId,
     name: file.name,
     fileType: file.type,
-    size: file.size
+    size: file.size,
+    totalChunks: totalChunks,
+    chunkSize: chunkSize
   };
   
   console.log('Sending file metadata:', metadata);
   dataChannel.send(JSON.stringify(metadata));
   
-  // Then, start sending the file in chunks
-  const chunkSize = 16 * 1024; // 16 KB chunks
+  // Flow control settings
   const bufferThreshold = 1024 * 1024; // 1MB buffer threshold
   let offset = 0;
-  let chunkCount = 0;
   let sending = true;
   
   // Reset progress
@@ -620,74 +1168,231 @@ function sendFile() {
     if (!sending) {
       console.log('Buffer low event, resuming sending');
       sending = true;
-      readNextChunk();
+      sendNextChunk();
     }
   };
   
-  function readAndSendChunk() {
-    // Check if buffer is getting full
-    if (dataChannel.bufferedAmount > bufferThreshold) {
-      console.log(`Data channel buffer full (${dataChannel.bufferedAmount} bytes), pausing send`);
-      sending = false;
+  // Start tracking unacknowledged chunks for retry
+  startUnacknowledgedChunksTimeout();
+  
+  // Send a specific chunk by sequence number
+  function sendChunk(sequence) {
+    const chunkStart = sequence * chunkSize;
+    const chunkEnd = Math.min(chunkStart + chunkSize, file.size);
+    
+    if (chunkStart >= file.size) {
+      console.warn(`Invalid chunk sequence ${sequence}, file size is ${file.size}`);
       return;
     }
     
     const reader = new FileReader();
+    const slice = file.slice(chunkStart, chunkEnd);
     
     reader.onload = (e) => {
       try {
-        dataChannel.send(e.target.result);
-        offset += e.target.result.byteLength;
-        chunkCount++;
+        // First send metadata about this chunk
+        const chunkMetadata = {
+          type: 'chunk-metadata',
+          transferId: currentTransferId,
+          sequence: sequence,
+          size: slice.size,
+          final: chunkEnd === file.size
+        };
         
-        if (chunkCount % 10 === 0) {
-          console.log(`Sent ${chunkCount} chunks (${offset}/${file.size} bytes), buffer: ${dataChannel.bufferedAmount}`);
+        dataChannel.send(JSON.stringify(chunkMetadata));
+        
+        // Then send the actual chunk data
+        dataChannel.send(e.target.result);
+        
+        // Track this chunk as sent but not yet acknowledged
+        sentChunks[sequence] = { sent: true, acked: false, timestamp: Date.now() };
+        
+        // Log progress periodically
+        if (sequence % 10 === 0 || chunkEnd === file.size) {
+          const totalSent = Object.keys(sentChunks).length;
+          console.log(`Sent chunk ${sequence}/${totalChunks} (${chunkEnd}/${file.size} bytes), buffer: ${dataChannel.bufferedAmount}`);
+          console.log(`Progress: ${totalSent}/${totalChunks} chunks sent`);
         }
         
         // Update progress
-        const progress = Math.min(100, Math.floor((offset / file.size) * 100));
+        const progress = Math.min(100, Math.floor((sequence / totalChunks) * 100));
         fileTransferProgress.value = progress;
         
-        // If there's more data to send, continue
-        if (offset < file.size) {
-          readNextChunk();
-        } else {
-          console.log('File sending complete:', chunkCount, 'chunks sent');
-          updateStatus(`File sent: ${file.name}`);
+        // If this was the last chunk, notify completion
+        if (chunkEnd === file.size) {
+          setTimeout(() => {
+            notifyTransferComplete();
+          }, 1000);
         }
       } catch (error) {
         console.error('Error sending chunk:', error);
+        
         // If send queue is full, wait and try again
         if (error.name === 'OperationError' && error.message.includes('send queue is full')) {
-          console.log('Send queue full, waiting to retry...');
+          console.log('Send queue full, pausing...');
           sending = false;
+        } else {
+          // Schedule a retry for this chunk
+          setTimeout(() => {
+            console.log(`Retrying chunk ${sequence} after error`);
+            sendChunk(sequence);
+          }, 1000);
         }
       }
     };
     
     reader.onerror = (error) => {
-      console.error('Error reading file:', error);
-      updateStatus('Error reading file');
+      console.error('Error reading file chunk:', error);
+      
+      // Retry after a delay
+      setTimeout(() => {
+        console.log(`Retrying chunk ${sequence} after read error`);
+        sendChunk(sequence);
+      }, 1000);
     };
     
-    const slice = file.slice(offset, offset + chunkSize);
     reader.readAsArrayBuffer(slice);
   }
   
-  function readNextChunk() {
+  // Send the next chunk in sequence
+  function sendNextChunk() {
     if (!sending) return;
     
-    // Use setTimeout to avoid blocking the UI and give the browser a chance to send data
-    setTimeout(readAndSendChunk, 0);
+    // If we've reached the end of the file, we're done
+    if (offset >= file.size) {
+      console.log('All chunks sent initially, waiting for acknowledgments...');
+      return;
+    }
+    
+    // Calculate the sequence number for this chunk
+    const sequence = Math.floor(offset / chunkSize);
+    
+    // Send this chunk
+    sendChunk(sequence);
+    
+    // Move to the next chunk
+    offset += chunkSize;
+    
+    // Schedule sending the next chunk
+    if (offset < file.size) {
+      setTimeout(sendNextChunk, 0);
+    }
   }
   
-  readNextChunk();
+  // Notify receiver that all chunks have been sent
+  function notifyTransferComplete() {
+    // Only send if all chunks have at least been sent once
+    if (Object.keys(sentChunks).length === totalChunks) {
+      try {
+        const completeMessage = {
+          type: 'transfer-complete',
+          transferId: currentTransferId,
+          totalChunks: totalChunks
+        };
+        
+        dataChannel.send(JSON.stringify(completeMessage));
+        console.log('Sent transfer-complete notification');
+      } catch (error) {
+        console.error('Error sending transfer-complete notification:', error);
+      }
+    }
+  }
+  
+  // Start checking for unacknowledged chunks and retry them
+  function startUnacknowledgedChunksTimeout() {
+    // Clear any existing timeout
+    clearTimeout(retryTimeoutId);
+    
+    // Check every 3 seconds
+    retryTimeoutId = setTimeout(function checkUnackedChunks() {
+      const currentTime = Date.now();
+      const unackedChunks = [];
+      
+      // Find chunks sent more than 5 seconds ago that haven't been acknowledged
+      for (const [sequence, status] of Object.entries(sentChunks)) {
+        if (status.sent && !status.acked && (currentTime - status.timestamp) > 5000) {
+          unackedChunks.push(parseInt(sequence));
+        }
+      }
+      
+      // Retry sending these chunks
+      if (unackedChunks.length > 0) {
+        console.log(`Retrying ${unackedChunks.length} unacknowledged chunks`);
+        
+        // Only retry a few chunks at once to avoid flooding
+        const toRetry = unackedChunks.slice(0, 5);
+        toRetry.forEach(sequence => {
+          sendChunk(sequence);
+        });
+      }
+      
+      // Schedule the next check if we still have chunks that haven't been acknowledged
+      if (Object.values(sentChunks).some(status => !status.acked)) {
+        retryTimeoutId = setTimeout(checkUnackedChunks, 3000);
+      } else if (Object.keys(sentChunks).length === totalChunks) {
+        console.log('All chunks acknowledged, transfer complete!');
+        updateStatus(`File sent: ${file.name} - All chunks acknowledged`);
+      }
+    }, 3000);
+  }
+  
+  // Start sending chunks
+  sendNextChunk();
+}
+
+// Initialize the application
+async function init() {
+  // Initialize IndexedDB
+  try {
+    await initDatabase();
+    console.log('File storage ready');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    console.warn('Falling back to in-memory storage');
+  }
+  
+  // Connect to signaling server
+  console.log('Initializing WebRTC file transfer application');
+  updateStatus('Connecting to server...');
+  connectWebSocket();
 }
 
 // Event listeners
 sendFileBtn.addEventListener('click', sendFile);
 
-// Initialize
-console.log('Initializing WebRTC file transfer application');
-updateStatus('Connecting to server...');
-connectWebSocket(); 
+// Start the application
+init();
+
+// Get all completed transfers
+function getCompletedTransfers() {
+  return new Promise((resolve, reject) => {
+    if (!db) {
+      resolve([]);
+      return;
+    }
+    
+    try {
+      const transaction = db.transaction([META_STORE], 'readonly');
+      const store = transaction.objectStore(META_STORE);
+      
+      const request = store.getAll();
+      
+      request.onsuccess = () => {
+        const transfers = request.result;
+        // Filter out transfers that are not completed
+        const completedTransfers = transfers.filter(transfer => transfer.status === 'completed');
+        // Sort by completion date, newest first
+        completedTransfers.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+        resolve(completedTransfers);
+      };
+      
+      request.onerror = (e) => {
+        console.error('Error getting completed transfers:', e.target.error);
+        resolve([]);
+      };
+    } catch (e) {
+      console.error('Exception getting completed transfers:', e);
+      resolve([]);
+    }
+  });
+}
