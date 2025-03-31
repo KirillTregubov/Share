@@ -83,12 +83,12 @@ export async function connect() {
           //   if (!e.candidate) return
 
           //   console.log('ICE send signal', e.candidate)
-          //   const signal = {
-          //     type: 'signal-ice',
-          //     to: peer.id,
-          //     ice: e.candidate
-          //   } satisfies ClientMessageType
-          //   socket!.send(JSON.stringify(signal))
+          //   //   const signal = {
+          //   //     type: 'signal-ice',
+          //   //     to: peer.id,
+          //   //     ice: e.candidate
+          //   //   } satisfies ClientMessageType
+          //   //   socket!.send(JSON.stringify(signal))
           // }
           // peer._connection.onconnectionstatechange = (e) => {
           //   if (!peer._connection) return
@@ -96,32 +96,32 @@ export async function connect() {
           //     'RTC: state changed:',
           //     peer._connection!.connectionState
           //   )
-          //   switch (peer._connection.connectionState) {
-          //     case 'disconnected':
-          //       peer._connection.close()
-          //       // this._onChannelClosed();
+          //   //   switch (peer._connection.connectionState) {
+          //   //     case 'disconnected':
+          //   //       peer._connection.close()
+          //   //       // this._onChannelClosed();
 
-          //       // TODO: retry connection
-          //       break
-          //     case 'failed':
-          //       peer._connection.close()
-          //       // this._conn = null;
-          //       // this._onChannelClosed();
-          //       break
-          //   }
-          // }
-          // peer._connection.oniceconnectionstatechange = (e) => {
-          //   console.log(
-          //     'ICE state changed:',
-          //     peer._connection!.iceConnectionState
-          //   )
-          //   //   switch (this._conn.iceConnectionState) {
+          //   //       // TODO: retry connection
+          //   //       break
           //   //     case 'failed':
-          //   //         console.error('ICE Gathering failed');
-          //   //         break;
-          //   //     default:
-          //   //         console.log('ICE Gathering', this._conn.iceConnectionState);
+          //   //       peer._connection.close()
+          //   //       // this._conn = null;
+          //   //       // this._onChannelClosed();
+          //   //       break
+          //   //   }
           //   // }
+          //   // peer._connection.oniceconnectionstatechange = (e) => {
+          //   //   console.log(
+          //   //     'ICE state changed:',
+          //   //     peer._connection!.iceConnectionState
+          //   //   )
+          //   //   //   switch (this._conn.iceConnectionState) {
+          //   //   //     case 'failed':
+          //   //   //         console.error('ICE Gathering failed');
+          //   //   //         break;
+          //   //   //     default:
+          //   //   //         console.log('ICE Gathering', this._conn.iceConnectionState);
+          //   //   // }
           // }
 
           // console.log('CREATE DATA CHANNEL - CREATE OFFER')
@@ -191,6 +191,61 @@ export async function connect() {
               'NO PEER CONNECTION YET. received signal sdp',
               message
             )
+
+            // console.log('Creating peer connection')
+            // peer._connection = new RTCPeerConnection({
+            //   // peerIdentity: peer.id,
+            //   iceServers: [
+            //     {
+            //       urls: 'stun:stun.l.google.com:19302'
+            //     }
+            //   ]
+            // })
+            // peer._connection.onicecandidate = (e) => {
+            //   if (!e.candidate) return
+
+            //   console.log('ICE send signal', e.candidate)
+            //   //   const signal = {
+            //   //     type: 'signal-ice',
+            //   //     to: peer.id,
+            //   //     ice: e.candidate
+            //   //   } satisfies ClientMessageType
+            //   //   socket!.send(JSON.stringify(signal))
+            // }
+            // peer._connection.onconnectionstatechange = (e) => {
+            //   if (!peer._connection) return
+            //   console.log(
+            //     'RTC: state changed:',
+            //     peer._connection!.connectionState
+            //   )
+            //   //   switch (peer._connection.connectionState) {
+            //   //     case 'disconnected':
+            //   //       peer._connection.close()
+            //   //       // this._onChannelClosed();
+
+            //   //       // TODO: retry connection
+            //   //       break
+            //   //     case 'failed':
+            //   //       peer._connection.close()
+            //   //       // this._conn = null;
+            //   //       // this._onChannelClosed();
+            //   //       break
+            //   //   }
+            //   // }
+            //   // peer._connection.oniceconnectionstatechange = (e) => {
+            //   //   console.log(
+            //   //     'ICE state changed:',
+            //   //     peer._connection!.iceConnectionState
+            //   //   )
+            //   //   //   switch (this._conn.iceConnectionState) {
+            //   //   //     case 'failed':
+            //   //   //         console.error('ICE Gathering failed');
+            //   //   //         break;
+            //   //   //     default:
+            //   //   //         console.log('ICE Gathering', this._conn.iceConnectionState);
+            //   //   // }
+            // }
+
             break
           }
 

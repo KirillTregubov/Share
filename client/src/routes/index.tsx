@@ -2,7 +2,11 @@ import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { CatchBoundary, createFileRoute } from '@tanstack/react-router'
 import { Suspense } from 'react'
 
-import { Peer, User } from '@/components/User'
+import { Peer } from '@/components/Peer'
+import {
+  //Peer,
+  User
+} from '@/components/User'
 import { connect } from '@/lib/data'
 import { peersQuery, socketQuery, userQuery } from '@/lib/queries'
 

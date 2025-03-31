@@ -60,6 +60,10 @@ function getDeviceName(userAgent: string | null) {
   return 'Unknown Device'
 }
 
+function normalizeIP(ip: string) {
+  return ip.startsWith('::ffff:') ? ip.substring(7) : ip
+}
+
 const networkMap: Map<string, Map<UserIDType, UserType>> = new Map()
 const connectionMap: Map<
   string,
@@ -69,9 +73,9 @@ const connectionMap: Map<
 type Data = { id: string; device: string }
 
 const server = Bun.serve<Data>({
-  hostname: '0.0.0.0',
+  // hostname: '0.0.0.0',
   port: 3000,
-  serverName: 'Share/1.0',
+  // serverName: 'Share/1.0', // Forces HTTPS
   fetch(req, server) {
     // upgrade the request to a WebSocket
     if (
@@ -84,14 +88,17 @@ const server = Bun.serve<Data>({
     ) {
       return // do not return a Response
     }
-    return new Response('Upgrade failed', { status: 500 })
+
+    return new Response('Websocket upgrade failed', { status: 500 })
   },
 
   websocket: {
     open(ws) {
       // a socket is opened
-      console.log('Client connected')
-      const network = isPrivateIP(ws.remoteAddress) ? 'local' : ws.remoteAddress
+      const network = isPrivateIP(normalizeIP(ws.remoteAddress))
+        ? 'local'
+        : normalizeIP(ws.remoteAddress)
+      console.log(`Client connected ${ws.remoteAddress} ${network}`)
 
       const user = UserSchema.parse({
         id: ws.data.id,
@@ -99,7 +106,7 @@ const server = Bun.serve<Data>({
         device: ws.data.device,
         network // for debugging
       })
-      console.log('Connecting', user, network)
+      // console.log('Connecting', user, network)
 
       if (networkMap.has(network)) {
         networkMap.get(network)!.set(user.id, user)
@@ -237,4 +244,8 @@ const server = Bun.serve<Data>({
   }
 })
 
-console.log(`Server started at http://localhost:${server.port}`)
+// if (process.env.NODE_ENV === 'production') {
+console.log(`Server started at ${server.url}`)
+// } else {
+//   console.log(`Server started at http://localhost:${server.port}`)
+// }

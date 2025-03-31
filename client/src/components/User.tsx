@@ -1,3 +1,6 @@
+import { socketQuery } from '@/lib/queries'
+import type { ClientUserType } from '@/lib/schemas'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import Avatar from 'boring-avatars'
 import clsx from 'clsx'
 import {
@@ -8,13 +11,12 @@ import {
   useState,
   type ReactNode
 } from 'react'
-import type { UserType } from 'schemas'
 import colors from 'tailwindcss/colors'
 
 export const User = forwardRef<
   HTMLDivElement,
   {
-    user: UserType
+    user: ClientUserType
     children?: ReactNode
     className?: string
   }
@@ -53,14 +55,170 @@ export const User = forwardRef<
 
 let numDraggedItems = 0
 
-export function Peer({ peer }: { peer: UserType }) {
+export function Peer({ peer }: { peer: ClientUserType }) {
+  const { data: socket } = useSuspenseQuery(socketQuery)
   const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [peerConnection, setPeerConnection] =
+    useState<RTCPeerConnection | null>(null)
+  const [transferProgress, setTransferProgress] = useState<number>(0)
+  const [transferStatus, setTransferStatus] = useState<string>('')
 
   const [dragging, setDragging] = useState(false)
-  const handleSubmit = useCallback((file: File) => {
-    console.log(file)
-  }, [])
+  const handleSubmit = useCallback(
+    (file: File) => {
+      setTransferStatus('Connecting...')
+
+      console.log('Sending message:', file)
+      //
+      // socket!.send(JSON.stringify(signal))
+
+      // Create peer connection if it doesn't exist
+      const pc =
+        peerConnection ||
+        new RTCPeerConnection({
+          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+        })
+
+      if (!peerConnection) {
+        setPeerConnection(pc)
+        console.log('Set peer connection')
+
+        // Handle ICE candidates
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            // Send candidate to peer via signaling server
+            const message = {
+              type: 'signal-ice',
+              to: peer.id,
+              ice: event.candidate
+            }
+
+            console.log('Send ICE candidate:', message)
+            // Send via WebSocket
+            // const socket = new WebSocket(`${import.meta.env.VITE_WS_URL}webrtc`)
+            // socket.onopen = () => socket.send(JSON.stringify(message))
+          }
+        }
+      }
+
+      // // Create data channel
+      // const dataChannel = pc.createDataChannel('fileTransfer')
+      // dataChannel.binaryType = 'arraybuffer'
+
+      // // Set up data channel events
+      // dataChannel.onopen = () => {
+      //   setTransferStatus('Connection established. Sending file...')
+      //   sendFile(file, dataChannel)
+      // }
+
+      // dataChannel.onerror = (error) => {
+      //   console.error('Data channel error:', error)
+      //   setTransferStatus('Error: Data channel failed')
+      // }
+
+      // // Create and send offer
+      // pc.createOffer()
+      //   .then((offer) => pc.setLocalDescription(offer))
+      //   .then(() => {
+      //     // Send offer to peer via signaling server
+      //     const message = {
+      //       type: 'signal-sdp',
+      //       to: peer.id,
+      //       sdp: pc.localDescription
+      //     }
+      //     // Send via WebSocket
+      //     // const socket = new WebSocket(`${import.meta.env.VITE_WS_URL}webrtc`)
+      //     // socket.onopen = () => socket.send(JSON.stringify(message))
+      //   })
+      //   .catch((error) => {
+      //     console.error('Error creating offer:', error)
+      //     setTransferStatus('Error: Connection failed')
+      //   })
+    },
+    [peer.id, peerConnection]
+  )
+
+  // Function to send file in chunks
+  // const sendFile = (file: File, channel: RTCDataChannel) => {
+  //   // First send metadata
+  //   const metadata = {
+  //     name: file.name,
+  //     type: file.type,
+  //     size: file.size
+  //   }
+  //   channel.send(JSON.stringify(metadata))
+
+  //   // Then send the file in chunks
+  //   const chunkSize = 16384 // 16KB chunks
+  //   const fileReader = new FileReader()
+  //   let offset = 0
+
+  //   fileReader.onload = (e) => {
+  //     if (e.target?.result && channel.readyState === 'open') {
+  //       channel.send(e.target.result as ArrayBuffer)
+  //       offset += (e.target.result as ArrayBuffer).byteLength
+
+  //       // Update progress
+  //       const progress = Math.min(100, Math.round((offset / file.size) * 100))
+  //       setTransferProgress(progress)
+  //       setTransferStatus(`Sending: ${progress}%`)
+
+  //       // Continue sending if there's more data
+  //       if (offset < file.size) {
+  //         readSlice(offset)
+  //       } else {
+  //         setTransferStatus('File sent successfully!')
+  //       }
+  //     }
+  //   }
+
+  //   fileReader.onerror = () => {
+  //     setTransferStatus('Error reading file')
+  //   }
+
+  //   const readSlice = (o: number) => {
+  //     const slice = file.slice(o, o + chunkSize)
+  //     fileReader.readAsArrayBuffer(slice)
+  //   }
+
+  //   readSlice(0)
+  // }
+
+  // Setup WebRTC answer handling
+  // useEffect(() => {
+  //   // const socket = new WebSocket(`${import.meta.env.VITE_WS_URL}webrtc`)
+
+  //   socket.onmessage = async (event) => {
+  //     try {
+  //       const message = JSON.parse(event.data)
+
+  //       if (message.sender === peer.id) {
+  //         if (message.type === 'signal-sdp' && message.sdp.type === 'answer') {
+  //           // Set remote description from answer
+  //           if (peerConnection) {
+  //             await peerConnection.setRemoteDescription(
+  //               new RTCSessionDescription(message.sdp)
+  //             )
+  //           }
+  //         } else if (message.type === 'signal-ice' && message.ice) {
+  //           // Add ICE candidate
+  //           if (peerConnection) {
+  //             await peerConnection.addIceCandidate(
+  //               new RTCIceCandidate(message.ice)
+  //             )
+  //           }
+  //         }
+  //       }
+  //     } catch (error) {
+  //       console.error('Error handling signaling message:', error)
+  //     }
+  //   }
+
+  //   return () => {
+  //     socket.close()
+  //   }
+  // }, [peer.id, peerConnection])
 
   const handleClick = useCallback(() => {
     if (!inputRef.current) return
@@ -155,8 +313,21 @@ export function Peer({ peer }: { peer: UserType }) {
           }
         }}
       />
+      {transferStatus && (
+        <div className="mt-2 w-full">
+          <div className="text-center text-sm">{transferStatus}</div>
+          {transferProgress > 0 && (
+            <div className="mt-1 h-2.5 w-full rounded-full bg-gray-200">
+              <div
+                className="h-2.5 rounded-full bg-blue-600"
+                style={{ width: `${transferProgress}%` }}
+              ></div>
+            </div>
+          )}
+        </div>
+      )}
       {dragging && (
-        <div className="absolute left-0 top-0 flex h-full w-full items-center justify-center bg-neutral-100/80">
+        <div className="absolute top-0 left-0 flex h-full w-full items-center justify-center bg-neutral-100/80">
           <div className="flex flex-col items-center justify-center">
             <h2 className="font-medium">Drop file here</h2>
           </div>

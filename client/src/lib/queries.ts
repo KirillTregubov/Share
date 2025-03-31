@@ -35,5 +35,14 @@ export const userQuery = queryOptions({
 
 export const peersQuery = queryOptions({
   queryKey: ['peers'],
+  queryFn: async () => {
+    const peers = await queryClient.getQueryData<
+      Map<UserIDType, ClientUserType>
+    >(['peers'])
+    if (!peers) {
+      throw new Error('No peers found')
+    }
+    return peers
+  },
   initialData: new Map<UserIDType, ClientUserType>()
 })

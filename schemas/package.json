@@ -2,13 +2,16 @@
   "name": "schemas",
   "module": "index.ts",
   "type": "module",
+  "scripts": {
+    "build": "tsc"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.8.2"
   },
   "dependencies": {
-    "zod": "^3.23.8"
+    "zod": "^3.24.2"
   }
 }
